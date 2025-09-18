@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML" Version="3.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ocr.Core/Ocr.Core.csproj" />
+  </ItemGroup>
+</Project>
