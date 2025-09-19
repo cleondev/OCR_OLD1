@@ -8,6 +8,16 @@
 
 ## 0) Mục tiêu, Phạm vi, Không-mục tiêu
 
+### Quy trình Git để tránh conflict
+
+- **Luôn làm việc trên nhánh `main`**: trước khi bắt đầu, kiểm tra `git status -sb` và chắc chắn `## main` đang sạch.
+- **Đồng bộ mã nguồn mới nhất**: chạy `git fetch --all` rồi `git pull --rebase` (hoặc `git pull origin main --rebase` nếu đã cấu hình remote). Không commit khi chưa cập nhật với remote.
+- **Commits gọn và mạch lạc**: gom các thay đổi có liên quan vào cùng một commit, tránh sửa file thừa gây xung đột.
+- **Kiểm tra trước khi commit**: `git status` để đảm bảo chỉ các file cần thiết được thay đổi, xoá file rác hoặc cache.
+- **Không tạo nhánh phụ**: tất cả thay đổi phải được commit trực tiếp lên `main` theo yêu cầu khách hàng.
+
+> Nếu phát hiện conflict, quay lại bước đồng bộ (`git pull --rebase`) rồi sửa trước khi commit.
+
 **Mục tiêu**
 - Web app on‑prem (ASP.NET Core **.NET 9**) + **SQLite**.
 - Hai khu vực chức năng:
