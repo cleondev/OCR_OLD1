@@ -23,5 +23,6 @@ public sealed class DocumentTypeRepository
     public Task<DocumentType?> FindByCodeAsync(string code, CancellationToken cancellationToken = default)
         => _dbContext.DocumentTypes
             .Include(x => x.Templates)
+            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Code == code, cancellationToken);
 }

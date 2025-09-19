@@ -56,7 +56,7 @@ builder.Services.AddScoped<OcrCoordinator>(sp =>
         sp.GetRequiredService<IOcrEngineFactory>(),
         sp.GetRequiredService<ITemplateExtractor>(),
         sp.GetRequiredService<ISamplerProvider>(),
-        code => repository.FindByCodeAsync(code));
+        (code, token) => repository.FindByCodeAsync(code, token));
 });
 
 builder.Services.AddHostedService<EngineWarmupWorker>();
