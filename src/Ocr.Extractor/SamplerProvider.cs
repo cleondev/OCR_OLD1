@@ -4,17 +4,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using Ocr.Core.Abstractions;
 
 public sealed class SamplerProvider : ISamplerProvider
 {
-    private readonly ILogger<SamplerProvider> _logger;
+    private readonly ILogger _logger;
     private readonly IDictionary<string, string[]> _samplers;
 
-    public SamplerProvider(ILogger<SamplerProvider> logger)
+    public SamplerProvider(ILogger logger)
     {
-        _logger = logger;
+        _logger = logger.ForContext<SamplerProvider>();
         _samplers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -27,7 +27,7 @@ public sealed class SamplerProvider : ISamplerProvider
 
         if (!_samplers.TryGetValue(samplerCode, out var fieldList))
         {
-            _logger.LogWarning("Sampler {Sampler} not found; returning all fields", samplerCode);
+            _logger.Warning("Sampler {Sampler} not found; returning all fields", samplerCode);
             return fields;
         }
 
@@ -65,7 +65,7 @@ public sealed class SamplerProvider : ISamplerProvider
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load samplers from JSON");
+            _logger.Error(ex, "Failed to load samplers from JSON");
         }
     }
 }
