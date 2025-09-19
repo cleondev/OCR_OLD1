@@ -1,0 +1,24 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+/.vs
+/src/Ocr.Api/obj/
+/src/Ocr.Classifier/obj
+/src/Ocr.Classifier/obj
+/src/Ocr.Api/obj
+/src/Ocr.Core/obj
+/src/Ocr.Engines/obj
+/src/Ocr.Extractor/obj
+/src/Ocr.Preprocess/obj
+/src/Ocr.Storage/obj
+/src/Ocr.Workers/obj
+/src/Ocr.Api/bin
+/src/Ocr.Classifier/bin
+/src/Ocr.Classifier/bin
+/src/Ocr.Api/bin
+/src/Ocr.Core/bin
+/src/Ocr.Engines/bin
+/src/Ocr.Extractor/bin
+/src/Ocr.Preprocess/bin
+/src/Ocr.Storage/bin
+/src/Ocr.Workers/bin
