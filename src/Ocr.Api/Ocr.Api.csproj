@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="../Ocr.Core/Ocr.Core.csproj" />
+    <ProjectReference Include="../Ocr.Storage/Ocr.Storage.csproj" />
+    <ProjectReference Include="../Ocr.Preprocess/Ocr.Preprocess.csproj" />
+    <ProjectReference Include="../Ocr.Engines/Ocr.Engines.csproj" />
+    <ProjectReference Include="../Ocr.Extractor/Ocr.Extractor.csproj" />
+    <ProjectReference Include="../Ocr.Classifier/Ocr.Classifier.csproj" />
+    <ProjectReference Include="../Ocr.Workers/Ocr.Workers.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.4" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+</Project>

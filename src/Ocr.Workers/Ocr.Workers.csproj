@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ocr.Core/Ocr.Core.csproj" />
+    <ProjectReference Include="../Ocr.Storage/Ocr.Storage.csproj" />
+    <ProjectReference Include="../Ocr.Engines/Ocr.Engines.csproj" />
+  </ItemGroup>
+</Project>
