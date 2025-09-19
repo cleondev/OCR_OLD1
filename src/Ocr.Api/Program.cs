@@ -2,7 +2,6 @@ using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -16,8 +15,19 @@ using Ocr.Extractor;
 using Ocr.Preprocess;
 using Ocr.Storage;
 using Ocr.Workers;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog(Log.Logger, dispose: true);
+
+builder.Services.AddSingleton<ILogger>(Log.Logger);
 
 builder.Services.AddOptions();
 builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection("Ocr"));
@@ -33,7 +43,7 @@ builder.Services.AddSingleton<EnhancedPreprocessor>();
 builder.Services.AddSingleton<RegexTemplateExtractor>();
 builder.Services.AddSingleton<SamplerProvider>(sp =>
 {
-    var provider = new SamplerProvider(sp.GetRequiredService<ILogger<SamplerProvider>>());
+    var provider = new SamplerProvider(sp.GetRequiredService<ILogger>());
     var env = sp.GetRequiredService<IHostEnvironment>();
     var path = Path.Combine(env.ContentRootPath, "templates", "samplers.json");
     if (File.Exists(path))
@@ -52,7 +62,7 @@ builder.Services.AddScoped<OcrCoordinator>(sp =>
 {
     var repository = sp.GetRequiredService<DocumentTypeRepository>();
     return new OcrCoordinator(
-        sp.GetRequiredService<ILogger<OcrCoordinator>>(),
+        sp.GetRequiredService<ILogger>(),
         sp.GetRequiredService<IOcrEngineFactory>(),
         sp.GetRequiredService<ITemplateExtractor>(),
         sp.GetRequiredService<ISamplerProvider>(),

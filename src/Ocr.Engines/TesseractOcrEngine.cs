@@ -3,7 +3,7 @@ namespace Ocr.Engines;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Models;
 using Ocr.Preprocess;
@@ -11,7 +11,7 @@ using Tesseract;
 
 public sealed class TesseractOcrEngine : IOcrEngine
 {
-    private readonly ILogger<TesseractOcrEngine> _logger;
+    private readonly ILogger _logger;
     private readonly FastPreprocessor _preprocessor;
     private readonly string _tessDataPath;
     private readonly string _languages;
@@ -20,7 +20,7 @@ public sealed class TesseractOcrEngine : IOcrEngine
     private readonly string? _whitelist;
 
     public TesseractOcrEngine(
-        ILogger<TesseractOcrEngine> logger,
+        ILogger logger,
         FastPreprocessor preprocessor,
         string tessDataPath,
         string languages,
@@ -28,7 +28,7 @@ public sealed class TesseractOcrEngine : IOcrEngine
         int oem,
         string? whitelist)
     {
-        _logger = logger;
+        _logger = logger.ForContext<TesseractOcrEngine>();
         _preprocessor = preprocessor;
         _tessDataPath = tessDataPath;
         _languages = languages;
@@ -58,7 +58,7 @@ public sealed class TesseractOcrEngine : IOcrEngine
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Tesseract OCR failed; returning fallback text");
+            _logger.Error(ex, "Tesseract OCR failed; returning fallback text");
             processed.Position = 0;
             using var reader = new StreamReader(processed, leaveOpen: true);
             var fallback = await reader.ReadToEndAsync(cancellationToken);

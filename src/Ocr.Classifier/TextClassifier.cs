@@ -4,25 +4,25 @@ using System.IO;
 using System.Linq;
 using Microsoft.ML;
 using Microsoft.ML.Data;
-using Microsoft.Extensions.Logging;
+using Serilog;
 
 public sealed class TextClassifier
 {
-    private readonly ILogger<TextClassifier> _logger;
+    private readonly ILogger _logger;
     private readonly object _syncRoot = new();
     private ITransformer? _model;
     private PredictionEngine<TextSample, TextPrediction>? _predictionEngine;
 
-    public TextClassifier(ILogger<TextClassifier> logger)
+    public TextClassifier(ILogger logger)
     {
-        _logger = logger;
+        _logger = logger.ForContext<TextClassifier>();
     }
 
     public void LoadModel(string modelPath)
     {
         if (!File.Exists(modelPath))
         {
-            _logger.LogWarning("Classifier model {Path} not found", modelPath);
+            _logger.Warning("Classifier model {Path} not found", modelPath);
             return;
         }
 
