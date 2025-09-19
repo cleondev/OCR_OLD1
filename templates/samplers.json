@@ -1,0 +1,4 @@
+{
+  "CCCD_FULL": ["id", "name", "dob"],
+  "CCCD_ID": ["id", "name"]
+}

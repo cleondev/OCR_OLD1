@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Tesseract" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.17.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ocr.Core/Ocr.Core.csproj" />
+    <ProjectReference Include="../Ocr.Preprocess/Ocr.Preprocess.csproj" />
+  </ItemGroup>
+</Project>

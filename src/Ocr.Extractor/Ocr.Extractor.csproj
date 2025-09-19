@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Ocr.Core/Ocr.Core.csproj" />
+  </ItemGroup>
+</Project>
