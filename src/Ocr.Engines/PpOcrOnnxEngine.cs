@@ -1,5 +1,7 @@
 namespace Ocr.Engines;
 
+using System;
+using System.IO;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,7 +40,7 @@ public sealed class PpOcrOnnxEngine : IOcrEngine, IAsyncDisposable
         {
             // The full PP-OCR pipeline is complex; we provide a simplified placeholder that demonstrates
             // how the ONNX sessions would be invoked while still producing deterministic output for the POC.
-            var bytes = processed.ToArray();
+            var bytes = ReadAllBytes(processed);
             var checksum = BitConverter.ToString(SHA256.HashData(bytes));
             return $"[PP-OCR]{checksum}";
         }
@@ -54,5 +56,18 @@ public sealed class PpOcrOnnxEngine : IOcrEngine, IAsyncDisposable
         _detector.Dispose();
         _recognizer.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        if (stream is MemoryStream memoryStream)
+        {
+            return memoryStream.ToArray();
+        }
+
+        stream.Position = 0;
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
     }
 }
