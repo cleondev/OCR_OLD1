@@ -145,7 +145,7 @@ app.MapGet("/test", (IWebHostEnvironment env) =>
         return Results.Problem("Test view not found", statusCode: StatusCodes.Status500InternalServerError);
     }
 
-    return Results.Stream(() => file.CreateReadStream(), MediaTypeNames.Text.Html);
+    return Results.Stream(file.CreateReadStream(), MediaTypeNames.Text.Html);
 });
 
 app.Run();
