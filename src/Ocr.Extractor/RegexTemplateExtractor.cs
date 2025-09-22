@@ -5,9 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Serilog;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Entities;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class RegexTemplateExtractor : ITemplateExtractor
 {

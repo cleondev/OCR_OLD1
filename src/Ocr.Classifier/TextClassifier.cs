@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class TextClassifier
 {
@@ -70,18 +71,15 @@ public sealed class TextClassifier
                 }
             }
 
-            if (_predictionEngine.OutputSchema.TryGetColumnIndex(nameof(TextPrediction.Score), out var scoreColumnIndex))
+            var scoreColumn = _predictionEngine.OutputSchema.GetColumnOrNull(nameof(TextPrediction.Score));
+            if (scoreColumn is { } column && column.HasSlotNames())
             {
-                var scoreColumn = _predictionEngine.OutputSchema[scoreColumnIndex];
-                if (scoreColumn.HasSlotNames())
+                VBuffer<ReadOnlyMemory<char>> slotNames = default;
+                column.GetSlotNames(ref slotNames);
+                var names = slotNames.DenseValues().Select(memory => memory.ToString()).ToArray();
+                if (maxIndex < names.Length)
                 {
-                    VBuffer<ReadOnlyMemory<char>> slotNames = default;
-                    scoreColumn.GetSlotNames(ref slotNames);
-                    var names = slotNames.DenseValues().Select(memory => memory.ToString()).ToArray();
-                    if (maxIndex < names.Length)
-                    {
-                        return names[maxIndex];
-                    }
+                    return names[maxIndex];
                 }
             }
 
