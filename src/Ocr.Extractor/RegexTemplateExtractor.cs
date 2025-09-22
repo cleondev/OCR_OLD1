@@ -5,17 +5,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Entities;
 
 public sealed class RegexTemplateExtractor : ITemplateExtractor
 {
-    private readonly ILogger<RegexTemplateExtractor> _logger;
+    private readonly ILogger _logger;
 
-    public RegexTemplateExtractor(ILogger<RegexTemplateExtractor> logger)
+    public RegexTemplateExtractor(ILogger logger)
     {
-        _logger = logger;
+        _logger = logger.ForContext<RegexTemplateExtractor>();
     }
 
     public Task<IReadOnlyDictionary<string, string>> ExtractAsync(string text, Template template, CancellationToken cancellationToken = default)
@@ -57,7 +57,7 @@ public sealed class RegexTemplateExtractor : ITemplateExtractor
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to parse template fields for template {TemplateId}", template.Id);
+            _logger.Error(ex, "Failed to parse template fields for template {TemplateId}", template.Id);
         }
 
         return Task.FromResult<IReadOnlyDictionary<string, string>>(results);

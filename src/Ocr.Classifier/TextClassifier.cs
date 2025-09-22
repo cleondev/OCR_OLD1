@@ -4,25 +4,25 @@ using System.IO;
 using System.Linq;
 using Microsoft.ML;
 using Microsoft.ML.Data;
-using Microsoft.Extensions.Logging;
+using Serilog;
 
 public sealed class TextClassifier
 {
-    private readonly ILogger<TextClassifier> _logger;
+    private readonly ILogger _logger;
     private readonly object _syncRoot = new();
     private ITransformer? _model;
     private PredictionEngine<TextSample, TextPrediction>? _predictionEngine;
 
-    public TextClassifier(ILogger<TextClassifier> logger)
+    public TextClassifier(ILogger logger)
     {
-        _logger = logger;
+        _logger = logger.ForContext<TextClassifier>();
     }
 
     public void LoadModel(string modelPath)
     {
         if (!File.Exists(modelPath))
         {
-            _logger.LogWarning("Classifier model {Path} not found", modelPath);
+            _logger.Warning("Classifier model {Path} not found", modelPath);
             return;
         }
 
@@ -50,6 +50,12 @@ public sealed class TextClassifier
             }
 
             var prediction = _predictionEngine.Predict(new TextSample { Text = text });
+
+            if (!string.IsNullOrWhiteSpace(prediction.PredictedLabel))
+            {
+                return prediction.PredictedLabel;
+            }
+
             if (prediction.Score is null || prediction.Score.Length == 0)
             {
                 return null;
@@ -64,12 +70,18 @@ public sealed class TextClassifier
                 }
             }
 
-            if (_predictionEngine.OutputSchema.GetColumnOrNull("PredictedLabel")?.Column.GetAnnotationValue<VBuffer<ReadOnlyMemory<char>>>(AnnotationUtils.Kinds.SlotNames) is { } slotNames)
+            if (_predictionEngine.OutputSchema.TryGetColumnIndex(nameof(TextPrediction.Score), out var scoreColumnIndex))
             {
-                var names = slotNames.DenseValues().Select(memory => memory.ToString()).ToArray();
-                if (maxIndex < names.Length)
+                var scoreColumn = _predictionEngine.OutputSchema[scoreColumnIndex];
+                if (scoreColumn.HasSlotNames())
                 {
-                    return names[maxIndex];
+                    VBuffer<ReadOnlyMemory<char>> slotNames = default;
+                    scoreColumn.GetSlotNames(ref slotNames);
+                    var names = slotNames.DenseValues().Select(memory => memory.ToString()).ToArray();
+                    if (maxIndex < names.Length)
+                    {
+                        return names[maxIndex];
+                    }
                 }
             }
 

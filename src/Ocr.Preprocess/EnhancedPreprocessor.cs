@@ -19,7 +19,7 @@ public sealed class EnhancedPreprocessor : IImagePreprocessor
         {
             ctx.AutoOrient();
             ctx.Contrast(1.2f);
-            ctx.Saturation(1.05f);
+            ctx.Saturate(1.05f);
             ctx.GaussianSharpen();
         });
 

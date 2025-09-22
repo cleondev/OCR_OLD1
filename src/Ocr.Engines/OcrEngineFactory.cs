@@ -2,7 +2,6 @@ namespace Ocr.Engines;
 
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
 using Ocr.Core;
@@ -10,10 +9,12 @@ using Ocr.Core.Abstractions;
 using Ocr.Core.Entities;
 using Ocr.Core.Options;
 using Ocr.Preprocess;
+using Serilog;
 
 public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
 {
-    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger _logger;
+    private readonly ILogger _baseLogger;
     private readonly IOptionsMonitor<OcrOptions> _options;
     private readonly FastPreprocessor _fastPreprocessor;
     private readonly EnhancedPreprocessor _enhancedPreprocessor;
@@ -21,12 +22,13 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
     private readonly Lazy<PpOcrOnnxEngine> _enhancedEngine;
 
     public OcrEngineFactory(
-        ILoggerFactory loggerFactory,
+        ILogger logger,
         IOptionsMonitor<OcrOptions> options,
         FastPreprocessor fastPreprocessor,
         EnhancedPreprocessor enhancedPreprocessor)
     {
-        _loggerFactory = loggerFactory;
+        _baseLogger = logger;
+        _logger = logger.ForContext<OcrEngineFactory>();
         _options = options;
         _fastPreprocessor = fastPreprocessor;
         _enhancedPreprocessor = enhancedPreprocessor;
@@ -54,7 +56,7 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
     {
         var opts = _options.CurrentValue.Tesseract;
         return new TesseractOcrEngine(
-            _loggerFactory.CreateLogger<TesseractOcrEngine>(),
+            _baseLogger,
             _fastPreprocessor,
             opts.TessdataPath,
             opts.Languages,
@@ -96,7 +98,7 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
         var detector = new InferenceSession(opts.DetModel, sessionOptions);
         var recognizer = new InferenceSession(opts.RecModel, sessionOptions);
         return new PpOcrOnnxEngine(
-            _loggerFactory.CreateLogger<PpOcrOnnxEngine>(),
+            _baseLogger,
             _enhancedPreprocessor,
             detector,
             recognizer);
@@ -110,8 +112,7 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _loggerFactory.CreateLogger<OcrEngineFactory>()
-                .LogError(ex, "Falling back to FAST OCR because ENHANCED engine could not be initialized");
+            _logger.Error(ex, "Falling back to FAST OCR because ENHANCED engine could not be initialized");
             return null;
         }
     }

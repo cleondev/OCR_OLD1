@@ -3,25 +3,25 @@ namespace Ocr.Engines;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using Microsoft.ML.OnnxRuntime;
 using Ocr.Core.Abstractions;
 using Ocr.Preprocess;
 
 public sealed class PpOcrOnnxEngine : IOcrEngine, IAsyncDisposable
 {
-    private readonly ILogger<PpOcrOnnxEngine> _logger;
+    private readonly ILogger _logger;
     private readonly EnhancedPreprocessor _preprocessor;
     private readonly InferenceSession _detector;
     private readonly InferenceSession _recognizer;
 
     public PpOcrOnnxEngine(
-        ILogger<PpOcrOnnxEngine> logger,
+        ILogger logger,
         EnhancedPreprocessor preprocessor,
         InferenceSession detector,
         InferenceSession recognizer)
     {
-        _logger = logger;
+        _logger = logger.ForContext<PpOcrOnnxEngine>();
         _preprocessor = preprocessor;
         _detector = detector;
         _recognizer = recognizer;
@@ -44,7 +44,7 @@ public sealed class PpOcrOnnxEngine : IOcrEngine, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ONNX OCR failed; returning fallback text");
+            _logger.Error(ex, "ONNX OCR failed; returning fallback text");
             return "[PP-OCR-ERROR]";
         }
     }
