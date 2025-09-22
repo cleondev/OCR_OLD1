@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class TextClassifier
 {

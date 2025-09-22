@@ -5,10 +5,11 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using Serilog;
 using Microsoft.ML.OnnxRuntime;
 using Ocr.Core.Abstractions;
 using Ocr.Preprocess;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class PpOcrOnnxEngine : IOcrEngine, IAsyncDisposable
 {

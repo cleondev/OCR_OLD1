@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Ocr.Core;
 using Ocr.Core.Abstractions;
 using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class EngineWarmupWorker : BackgroundService
 {

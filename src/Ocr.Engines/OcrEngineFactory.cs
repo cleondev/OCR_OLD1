@@ -10,6 +10,7 @@ using Ocr.Core.Entities;
 using Ocr.Core.Options;
 using Ocr.Preprocess;
 using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
 {

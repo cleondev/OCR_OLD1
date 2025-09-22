@@ -29,7 +29,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog(Log.Logger, dispose: true);
 
-builder.Services.AddSingleton<ILogger>(Log.Logger);
+builder.Services.AddSingleton<Serilog.ILogger>(Log.Logger);
 
 builder.Services.AddOptions();
 builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection("Ocr"));
@@ -45,7 +45,7 @@ builder.Services.AddSingleton<EnhancedPreprocessor>();
 builder.Services.AddSingleton<RegexTemplateExtractor>();
 builder.Services.AddSingleton<SamplerProvider>(sp =>
 {
-    var provider = new SamplerProvider(sp.GetRequiredService<ILogger>());
+    var provider = new SamplerProvider(sp.GetRequiredService<Serilog.ILogger>());
     var env = sp.GetRequiredService<IHostEnvironment>();
     var path = Path.Combine(env.ContentRootPath, "templates", "samplers.json");
     if (File.Exists(path))
@@ -64,7 +64,7 @@ builder.Services.AddScoped<OcrCoordinator>(sp =>
 {
     var repository = sp.GetRequiredService<DocumentTypeRepository>();
     return new OcrCoordinator(
-        sp.GetRequiredService<ILogger>(),
+        sp.GetRequiredService<Serilog.ILogger>(),
         sp.GetRequiredService<IOcrEngineFactory>(),
         sp.GetRequiredService<ITemplateExtractor>(),
         sp.GetRequiredService<ISamplerProvider>(),
@@ -145,7 +145,7 @@ app.MapGet("/test", (IWebHostEnvironment env) =>
         return Results.Problem("Test view not found", statusCode: StatusCodes.Status500InternalServerError);
     }
 
-    return Results.Stream(file.CreateReadStream, MediaTypeNames.Text.Html);
+    return Results.Stream(() => file.CreateReadStream(), MediaTypeNames.Text.Html);
 });
 
 app.Run();

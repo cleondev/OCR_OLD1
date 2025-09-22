@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Serilog;
 using Ocr.Core.Abstractions;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class SamplerProvider : ISamplerProvider
 {

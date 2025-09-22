@@ -3,11 +3,12 @@ namespace Ocr.Engines;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Serilog;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Models;
 using Ocr.Preprocess;
 using Tesseract;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class TesseractOcrEngine : IOcrEngine
 {
