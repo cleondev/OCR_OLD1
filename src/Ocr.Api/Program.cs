@@ -1,6 +1,8 @@
 using System.Linq;
 using System.IO;
+using System.Net.Mime;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -86,6 +88,8 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+app.UseStaticFiles();
+
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -133,52 +137,16 @@ app.MapPost("/api/ocr", async Task<Results<Ok<OcrResult>, BadRequest<string>>> (
     return TypedResults.Ok(result);
 });
 
-app.MapGet("/test", () => Results.Content(@"<!DOCTYPE html>
-<html lang=\"en\">
-<head>
-  <meta charset=\"utf-8\" />
-  <title>OCR Suite Test</title>
-  <style>
-    body { font-family: sans-serif; margin: 40px; }
-    label { display: block; margin-top: 12px; }
-    textarea { width: 100%; min-height: 160px; }
-  </style>
-</head>
-<body>
-  <h1>OCR Suite – Test UI</h1>
-  <form id=\"ocr-form\" enctype=\"multipart/form-data\">
-    <label>Chọn ảnh/PDF: <input type=\"file\" name=\"file\" required /></label>
-    <label>Mã loại tài liệu (tùy chọn): <input name=\"docType\" placeholder=\"VD: CCCD_FULL\" /></label>
-    <label>Sampler (tùy chọn): <input name=\"sampler\" placeholder=\"VD: CCCD_ID\" /></label>
-    <label>Chế độ OCR:
-      <select name=\"mode\">
-        <option value=\"AUTO\">Auto</option>
-        <option value=\"FAST\">Fast (Tesseract)</option>
-        <option value=\"ENHANCED\">Enhanced (ONNX)</option>
-      </select>
-    </label>
-    <button type=\"submit\">Nhận dạng</button>
-  </form>
-  <h2>Kết quả</h2>
-  <pre id=\"result\"></pre>
-  <script>
-    const form = document.getElementById('ocr-form');
-    const resultEl = document.getElementById('result');
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const data = new FormData(form);
-      resultEl.textContent = 'Đang xử lý...';
-      const response = await fetch('/api/ocr', { method: 'POST', body: data });
-      if (!response.ok) {
-        resultEl.textContent = 'Lỗi: ' + await response.text();
-        return;
-      }
-      const json = await response.json();
-      resultEl.textContent = JSON.stringify(json, null, 2);
-    });
-  </script>
-</body>
-</html>", "text/html"));
+app.MapGet("/test", (IWebHostEnvironment env) =>
+{
+    var file = env.WebRootFileProvider.GetFileInfo("test/index.html");
+    if (!file.Exists)
+    {
+        return Results.Problem("Test view not found", statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    return Results.Stream(file.CreateReadStream, MediaTypeNames.Text.Html);
+});
 
 app.Run();
 
