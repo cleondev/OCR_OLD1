@@ -10,6 +10,7 @@ using Ocr.Core.Entities;
 using Ocr.Core.Options;
 using Ocr.Preprocess;
 using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
 {
@@ -46,7 +47,7 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
 
         return effectiveMode switch
         {
-            OcrMode.Enhanced => TryGetEnhancedEngine() ?? _fastEngine.Value,
+            OcrMode.Enhanced => TryGetEnhancedEngine() ?? (IOcrEngine)_fastEngine.Value,
             OcrMode.Fast => _fastEngine.Value,
             _ => _fastEngine.Value
         };
@@ -104,7 +105,7 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
             recognizer);
     }
 
-    private PpOcrOnnxEngine? TryGetEnhancedEngine()
+    private IOcrEngine? TryGetEnhancedEngine()
     {
         try
         {
@@ -124,13 +125,17 @@ public sealed class OcrEngineFactory : IOcrEngineFactory, IAsyncDisposable
             await _enhancedEngine.Value.DisposeAsync();
         }
 
-        if (_fastEngine.IsValueCreated && _fastEngine.Value is IAsyncDisposable asyncDisposable)
+        if (_fastEngine.IsValueCreated)
         {
-            await asyncDisposable.DisposeAsync();
-        }
-        else if (_fastEngine.IsValueCreated && _fastEngine.Value is IDisposable disposable)
-        {
-            disposable.Dispose();
+            object fastEngine = _fastEngine.Value;
+            if (fastEngine is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+            else if (fastEngine is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 }

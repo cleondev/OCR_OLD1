@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OCR Suite Test</title>
+  <link rel="stylesheet" href="test.css" />
+</head>
+<body>
+  <h1>OCR Suite – Test UI</h1>
+  <form id="ocr-form" enctype="multipart/form-data">
+    <label>Chọn ảnh/PDF: <input type="file" name="file" required /></label>
+    <label>Mã loại tài liệu (tùy chọn): <input name="docType" placeholder="VD: CCCD_FULL" /></label>
+    <label>Sampler (tùy chọn): <input name="sampler" placeholder="VD: CCCD_ID" /></label>
+    <label>Chế độ OCR:
+      <select name="mode">
+        <option value="AUTO">Auto</option>
+        <option value="FAST">Fast (Tesseract)</option>
+        <option value="ENHANCED">Enhanced (ONNX)</option>
+      </select>
+    </label>
+    <button type="submit">Nhận dạng</button>
+  </form>
+  <h2>Kết quả</h2>
+  <pre id="result"></pre>
+  <script src="test.js"></script>
+</body>
+</html>
