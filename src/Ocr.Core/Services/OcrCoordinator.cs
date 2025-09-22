@@ -3,10 +3,11 @@ namespace Ocr.Core.Services;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Serilog;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Entities;
 using Ocr.Core.Models;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class OcrCoordinator
 {

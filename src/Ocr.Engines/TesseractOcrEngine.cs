@@ -3,11 +3,12 @@ namespace Ocr.Engines;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Serilog;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Models;
 using Ocr.Preprocess;
 using Tesseract;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 public sealed class TesseractOcrEngine : IOcrEngine
 {
@@ -52,7 +53,7 @@ public sealed class TesseractOcrEngine : IOcrEngine
                 engine.SetVariable("tessedit_char_whitelist", _whitelist);
             }
 
-            using var pix = Pix.LoadFromMemory(processed.ToArray());
+            using var pix = Pix.LoadFromMemory(ReadAllBytes(processed));
             using var page = engine.Process(pix, (PageSegMode)_psm);
             return page.GetText();
         }
@@ -64,5 +65,18 @@ public sealed class TesseractOcrEngine : IOcrEngine
             var fallback = await reader.ReadToEndAsync(cancellationToken);
             return $"[TESSERACT_ERROR]{fallback}";
         }
+    }
+
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        if (stream is MemoryStream memoryStream)
+        {
+            return memoryStream.ToArray();
+        }
+
+        stream.Position = 0;
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
     }
 }
