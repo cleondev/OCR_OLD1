@@ -50,6 +50,12 @@ public sealed class TextClassifier
             }
 
             var prediction = _predictionEngine.Predict(new TextSample { Text = text });
+
+            if (!string.IsNullOrWhiteSpace(prediction.PredictedLabel))
+            {
+                return prediction.PredictedLabel;
+            }
+
             if (prediction.Score is null || prediction.Score.Length == 0)
             {
                 return null;
@@ -64,12 +70,18 @@ public sealed class TextClassifier
                 }
             }
 
-            if (_predictionEngine.OutputSchema.GetColumnOrNull("PredictedLabel")?.Column.GetAnnotationValue<VBuffer<ReadOnlyMemory<char>>>(AnnotationUtils.Kinds.SlotNames) is { } slotNames)
+            if (_predictionEngine.OutputSchema.TryGetColumnIndex(nameof(TextPrediction.Score), out var scoreColumnIndex))
             {
-                var names = slotNames.DenseValues().Select(memory => memory.ToString()).ToArray();
-                if (maxIndex < names.Length)
+                var scoreColumn = _predictionEngine.OutputSchema[scoreColumnIndex];
+                if (scoreColumn.HasSlotNames())
                 {
-                    return names[maxIndex];
+                    VBuffer<ReadOnlyMemory<char>> slotNames = default;
+                    scoreColumn.GetSlotNames(ref slotNames);
+                    var names = slotNames.DenseValues().Select(memory => memory.ToString()).ToArray();
+                    if (maxIndex < names.Length)
+                    {
+                        return names[maxIndex];
+                    }
                 }
             }
 
