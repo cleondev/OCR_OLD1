@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Ocr.Api.Mock;
 using Ocr.Core;
 using Ocr.Core.Abstractions;
 using Ocr.Core.Models;
@@ -38,6 +39,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
 builder.Services.AddScoped<DocumentTypeRepository>();
+
+builder.Services.AddSingleton<AdminMockStore>();
 
 builder.Services.AddSingleton<FastPreprocessor>();
 builder.Services.AddSingleton<EnhancedPreprocessor>();
@@ -148,6 +151,11 @@ app.MapGet("/test", (IWebHostEnvironment env) =>
     return Results.Stream(file.CreateReadStream(), MediaTypeNames.Text.Html);
 });
 
+app.MapGet("/admin", ServeAdminIndex);
+app.MapFallback("/admin/{*path}", ServeAdminIndex);
+
+app.MapAdminMockEndpoints();
+
 app.Run();
 
 static OcrMode ParseMode(string? raw)
@@ -163,4 +171,15 @@ static OcrMode ParseMode(string? raw)
         "ENHANCED" => OcrMode.Enhanced,
         _ => OcrMode.Auto
     };
+}
+
+static IResult ServeAdminIndex(IWebHostEnvironment env)
+{
+    var file = env.WebRootFileProvider.GetFileInfo("admin/index.html");
+    if (!file.Exists)
+    {
+        return Results.Problem("Admin view not found", statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    return Results.Stream(file.CreateReadStream(), MediaTypeNames.Text.Html);
 }
