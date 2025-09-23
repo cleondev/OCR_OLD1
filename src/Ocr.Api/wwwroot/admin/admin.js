@@ -472,6 +472,16 @@ function renderSidebar(segments) {
     })
     .join('');
 
+  const showDocTypeShortcuts = !uiState.showCreateDocType;
+  const docTypeShortcutSection = showDocTypeShortcuts
+    ? `
+      <div class="section-title">Chi tiết loại tài liệu</div>
+      <div class="sidebar-docs">
+        ${docTypeLinks || '<span class="inline-hint">Chưa có loại tài liệu</span>'}
+      </div>
+    `
+    : '';
+
   return `
     <aside class="sidebar">
       <h1>OCR Suite Admin</h1>
@@ -480,10 +490,7 @@ function renderSidebar(segments) {
         <a href="#/datasets" class="${topRoute === 'datasets' ? 'active' : ''}">Tập dữ liệu</a>
         <a href="#/training" class="${topRoute === 'training' ? 'active' : ''}">Huấn luyện</a>
       </nav>
-      <div class="section-title">Chi tiết loại tài liệu</div>
-      <div class="sidebar-docs">
-        ${docTypeLinks || '<span class="inline-hint">Chưa có loại tài liệu</span>'}
-      </div>
+      ${docTypeShortcutSection}
       <button class="linklike" id="sidebar-create-doc-type">+ Thêm loại tài liệu</button>
     </aside>
   `;
@@ -586,17 +593,9 @@ function renderDocTypeList() {
 
   const createForm = uiState.showCreateDocType ? renderDocTypeCreateForm() : '';
 
-  return `
-    <div class="main-header">
-      <div>
-        <h2>Quản lý loại tài liệu</h2>
-        <p class="inline-hint">Danh sách ở dạng bảng giúp so sánh nhanh tập dữ liệu và lịch sử huấn luyện của từng loại.</p>
-      </div>
-      <div class="actions">
-        <button class="button" id="open-create-doc-type">+ Tạo loại tài liệu</button>
-      </div>
-    </div>
-    ${createForm}
+  const docTypeTableSection = uiState.showCreateDocType
+    ? ''
+    : `
     <div class="panel">
       <div class="table-wrapper">
         <table class="doc-type-table">
@@ -619,6 +618,20 @@ function renderDocTypeList() {
         </table>
       </div>
     </div>
+  `;
+
+  return `
+    <div class="main-header">
+      <div>
+        <h2>Quản lý loại tài liệu</h2>
+        <p class="inline-hint">Danh sách ở dạng bảng giúp so sánh nhanh tập dữ liệu và lịch sử huấn luyện của từng loại.</p>
+      </div>
+      <div class="actions">
+        <button class="button" id="open-create-doc-type">+ Tạo loại tài liệu</button>
+      </div>
+    </div>
+    ${createForm}
+    ${docTypeTableSection}
   `;
 }
 
