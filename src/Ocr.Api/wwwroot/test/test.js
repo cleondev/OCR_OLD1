@@ -20,6 +20,8 @@
 
   let currentResult = null;
 
+  document.addEventListener('keydown', handleNavigationShortcut);
+
   if (!form || !submitButton || !summaryEl || !fieldsContainer || !metadataContainer || !rawJsonCard || !rawJsonEl) {
     return;
   }
@@ -146,6 +148,33 @@
       submitButton.disabled = false;
       submitButton.textContent = originalText;
     }
+  }
+
+  function handleNavigationShortcut(event) {
+    if (!event.ctrlKey || !event.altKey) {
+      return;
+    }
+
+    if (shouldIgnoreShortcutTarget(event.target)) {
+      return;
+    }
+
+    const key = event.key ? event.key.toLowerCase() : '';
+    if (key === 'a') {
+      event.preventDefault();
+      showInlineMessage('Đang mở Admin (Ctrl+Alt+A)...');
+      window.location.href = '/admin';
+    } else if (key === 't') {
+      event.preventDefault();
+      if (window.location.pathname !== '/test') {
+        window.location.href = '/test';
+      }
+    }
+  }
+
+  function shouldIgnoreShortcutTarget(target) {
+    return target instanceof HTMLElement &&
+      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
   }
 
   function renderResult(result) {

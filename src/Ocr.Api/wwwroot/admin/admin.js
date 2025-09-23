@@ -16,6 +16,39 @@ const uiState = {
   newSamplerFor: null
 };
 
+document.addEventListener('keydown', handleNavigationShortcut);
+
+function handleNavigationShortcut(event) {
+  if (!event.ctrlKey || !event.altKey) {
+    return;
+  }
+
+  if (shouldIgnoreShortcutTarget(event.target)) {
+    return;
+  }
+
+  const key = event.key ? event.key.toLowerCase() : '';
+  if (key === 't') {
+    event.preventDefault();
+    showToast('Đang chuyển sang Test (Ctrl+Alt+T)...');
+    window.location.href = '/test';
+  } else if (key === 'a') {
+    event.preventDefault();
+    if (window.location.pathname !== '/admin') {
+      window.location.href = '/admin';
+    }
+  }
+}
+
+function shouldIgnoreShortcutTarget(target) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName;
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target.isContentEditable;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('hashchange', () => {
     void handleRouteChange();
