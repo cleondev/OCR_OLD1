@@ -44,6 +44,13 @@ body {
   padding-right: 6px;
 }
 
+.sidebar-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
 .sidebar a,
 .sidebar button.linklike {
   display: block;
@@ -171,7 +178,8 @@ body {
   background: var(--bg-panel);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 table {

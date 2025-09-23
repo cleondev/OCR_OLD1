@@ -475,7 +475,6 @@ function renderSidebar(segments) {
   const showDocTypeShortcuts = !uiState.showCreateDocType;
   const docTypeShortcutSection = showDocTypeShortcuts
     ? `
-      <div class="section-title">Chi tiết loại tài liệu</div>
       <div class="sidebar-docs">
         ${docTypeLinks || '<span class="inline-hint">Chưa có loại tài liệu</span>'}
       </div>
