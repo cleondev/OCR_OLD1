@@ -1,0 +1,90 @@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OCR Suite – Test nhanh</title>
+    <link rel="stylesheet" href="@Url.Content("~/css/test.css")" />
+</head>
+<body>
+    <main class="container">
+        <header class="hero">
+            <h1>OCR Suite – Test nhanh pipeline</h1>
+            <p>Tải ảnh/PDF để trải nghiệm pipeline AUTO/FAST/ENHANCED. Chọn docType & sampler để xem kết quả trích xuất.</p>
+        </header>
+
+        <section class="card">
+            <form id="ocr-form" enctype="multipart/form-data" class="form-grid">
+                <div class="form-field full">
+                    <label for="file-input">Tệp ảnh/PDF</label>
+                    <input id="file-input" type="file" name="file" accept="image/*,.pdf" required />
+                </div>
+                <div class="form-field">
+                    <label for="docType-input">DocType (tùy chọn)</label>
+                    <input id="docType-input" name="docType" placeholder="VD: CCCD_FULL" />
+                </div>
+                <div class="form-field">
+                    <label for="sampler-input">Sampler (tùy chọn)</label>
+                    <input id="sampler-input" name="sampler" placeholder="VD: CCCD_ID" />
+                </div>
+                <div class="form-field">
+                    <label for="mode-select">Chế độ OCR</label>
+                    <select id="mode-select" name="mode">
+                        <option value="AUTO">AUTO (theo cấu hình docType)</option>
+                        <option value="FAST">FAST – Tesseract</option>
+                        <option value="ENHANCED">ENHANCED – PP-OCR</option>
+                    </select>
+                </div>
+                <div class="actions">
+                    <button class="button" type="submit">Nhận dạng ngay</button>
+                    <button class="button secondary" type="reset" id="reset-form">Làm mới</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card hidden" id="result-card">
+            <header class="result-header">
+                <div>
+                    <h2>Kết quả nhận dạng</h2>
+                    <p id="result-summary" class="muted"></p>
+                </div>
+                <div class="result-actions">
+                    <button class="button secondary" id="view-full-text">Xem full text</button>
+                    <button class="button" id="download-json">Tải JSON</button>
+                </div>
+            </header>
+            <div id="fields-container" class="fields-grid"></div>
+            <div id="metadata-container" class="metadata"></div>
+        </section>
+
+        <section class="card hidden suggestion" id="suggestion-card">
+            <h3>Gợi ý nâng cấp chế độ OCR</h3>
+            <p>Kết quả FAST có vẻ thiếu dữ liệu. Thử chuyển sang ENHANCED để cải thiện độ chính xác.</p>
+            <button class="button" id="try-enhanced">Chạy lại với ENHANCED</button>
+        </section>
+
+        <section class="card hidden" id="raw-json-card">
+            <header class="result-header">
+                <h3>Dữ liệu JSON</h3>
+                <button class="button secondary" id="toggle-json">Ẩn/hiện</button>
+            </header>
+            <pre id="raw-json"></pre>
+        </section>
+    </main>
+
+    <div class="modal hidden" id="full-text-modal" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <header>
+                <h3>Full text OCR</h3>
+                <button class="button secondary" id="close-modal">Đóng</button>
+            </header>
+            <pre id="full-text-content"></pre>
+        </div>
+    </div>
+
+    <script src="@Url.Content("~/scripts/test.js")"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OCR Suite Admin Console</title>
+    <link rel="stylesheet" href="@Url.Content("~/css/admin.css")" />
+</head>
+<body>
+    <div id="app-root">
+        <div class="app-shell">
+            <aside class="sidebar">
+                <h1>OCR Suite Admin</h1>
+                <nav class="primary-nav">
+                    <a href="#/doc-types" data-nav="doc-types">Loại tài liệu</a>
+                    <a href="#/datasets" data-nav="datasets">Tập dữ liệu</a>
+                    <a href="#/training" data-nav="training">Huấn luyện</a>
+                </nav>
+                <button class="linklike" id="sidebar-create-doc-type">+ Thêm loại tài liệu</button>
+            </aside>
+            <main class="main">
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Đang tải dữ liệu mock...</p>
+                </div>
+            </main>
+        </div>
+        <div id="toast-container"></div>
+    </div>
+    <script src="@Url.Content("~/scripts/admin.js")" type="module"></script>
+</body>
+</html>

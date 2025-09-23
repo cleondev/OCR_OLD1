@@ -28,7 +28,7 @@ builder.Services.AddSingleton<Serilog.ILogger>(Log.Logger);
 builder.Services.AddOptions();
 builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection("Ocr"));
 
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("Default")));
