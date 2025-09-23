@@ -179,6 +179,11 @@ table {
   border-collapse: collapse;
 }
 
+table.doc-type-table th,
+table.doc-type-table td {
+  white-space: nowrap;
+}
+
 thead {
   background: #f1f5f9;
   text-transform: uppercase;
@@ -196,6 +201,29 @@ th {
 
 tr:last-child td {
   border-bottom: none;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dataset-filter label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.dataset-filter select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font: inherit;
 }
 
 .badge {
