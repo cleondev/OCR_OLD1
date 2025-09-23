@@ -18,6 +18,7 @@ const uiState = {
 };
 
 let lastRouteSegments = [];
+let sidebarEventsBound = false;
 
 function resetDocTypeScopedUiState() {
   uiState.sampleFormFor = null;
@@ -512,37 +513,50 @@ function renderApp() {
     return;
   }
 
+  const main = root.querySelector('main');
+  if (!main) {
+    return;
+  }
+
   const segments = parseHash();
-  const sidebar = renderSidebar(segments);
-  const mainContent = renderMainContent(segments);
-  const toast = state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : '';
-
-  root.innerHTML = `
-    <div class="app-shell">
-      ${sidebar}
-      <main class="main">${mainContent}</main>
-    </div>
-    ${toast}
-  `;
-
   bindSidebarEvents();
+  updateSidebar(root, segments);
+
+  const mainContent = renderMainContent(segments);
+  main.innerHTML = mainContent;
+
+  updateToast();
   bindContentEvents(segments);
 }
 
-function renderSidebar(segments) {
+function updateSidebar(root, segments) {
   const topRoute = segments[0] || 'doc-types';
+  const navLinks = root.querySelectorAll('[data-nav]');
+  navLinks.forEach((link) => {
+    const target = link.getAttribute('data-nav');
+    if (!target) {
+      return;
+    }
+    if (target === topRoute) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
+    }
+  });
+}
 
-  return `
-    <aside class="sidebar">
-      <h1>OCR Suite Admin</h1>
-      <nav class="primary-nav">
-        <a href="#/doc-types" class="${topRoute === 'doc-types' ? 'active' : ''}">Loại tài liệu</a>
-        <a href="#/datasets" class="${topRoute === 'datasets' ? 'active' : ''}">Tập dữ liệu</a>
-        <a href="#/training" class="${topRoute === 'training' ? 'active' : ''}">Huấn luyện</a>
-      </nav>
-      <button class="linklike" id="sidebar-create-doc-type">+ Thêm loại tài liệu</button>
-    </aside>
-  `;
+function updateToast() {
+  const container = document.getElementById('toast-container');
+  if (!container) {
+    return;
+  }
+
+  if (!state.toast) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = `<div class="toast">${escapeHtml(state.toast)}</div>`;
 }
 
 function renderMainContent(segments) {
@@ -1521,12 +1535,17 @@ function renderSampleDetail(sample) {
   `;
 }
 function bindSidebarEvents() {
+  if (sidebarEventsBound) {
+    return;
+  }
+
   const createBtn = document.getElementById('sidebar-create-doc-type');
   if (createBtn) {
     createBtn.addEventListener('click', (event) => {
       event.preventDefault();
       navigateTo('#/doc-types/new');
     });
+    sidebarEventsBound = true;
   }
 }
 
