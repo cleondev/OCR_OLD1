@@ -9,7 +9,6 @@ const state = {
 };
 
 const uiState = {
-  showCreateDocType: false,
   sampleFormFor: null,
   newTemplateFor: null,
   templateTestSelection: {},
@@ -17,6 +16,75 @@ const uiState = {
   datasetFilterDocType: 'all',
   trainingScope: {}
 };
+
+let lastRouteSegments = [];
+
+function resetDocTypeScopedUiState() {
+  uiState.sampleFormFor = null;
+  uiState.newTemplateFor = null;
+  uiState.newSamplerFor = null;
+  uiState.templateTestSelection = {};
+}
+
+function resetUiStateOutsideTab(activeTab) {
+  if (activeTab !== 'dataset') {
+    uiState.sampleFormFor = null;
+  }
+  if (activeTab !== 'templates') {
+    uiState.newTemplateFor = null;
+    uiState.templateTestSelection = {};
+  }
+  if (activeTab !== 'samplers') {
+    uiState.newSamplerFor = null;
+  }
+}
+
+function applyRouteUiState(nextSegments) {
+  if (!Array.isArray(nextSegments)) {
+    lastRouteSegments = [];
+    resetDocTypeScopedUiState();
+    return;
+  }
+
+  const nextTop = nextSegments[0];
+  if (nextTop !== 'doc-types') {
+    resetDocTypeScopedUiState();
+    lastRouteSegments = nextSegments.slice();
+    return;
+  }
+
+  const nextSecond = nextSegments[1];
+  if (!nextSecond || nextSecond === 'new') {
+    resetDocTypeScopedUiState();
+    lastRouteSegments = nextSegments.slice();
+    return;
+  }
+
+  const nextDocId = Number(nextSecond);
+  if (Number.isNaN(nextDocId)) {
+    resetDocTypeScopedUiState();
+    lastRouteSegments = nextSegments.slice();
+    return;
+  }
+
+  const previousDocIdSegment = lastRouteSegments[0] === 'doc-types' && lastRouteSegments[1] && lastRouteSegments[1] !== 'new'
+    ? Number(lastRouteSegments[1])
+    : NaN;
+
+  if (Number.isNaN(previousDocIdSegment) || previousDocIdSegment !== nextDocId) {
+    resetDocTypeScopedUiState();
+    lastRouteSegments = nextSegments.slice();
+    return;
+  }
+
+  const previousTab = normalizeDocTypeTab(lastRouteSegments[2]);
+  const nextTab = normalizeDocTypeTab(nextSegments[2]);
+  if (previousTab !== nextTab) {
+    resetUiStateOutsideTab(nextTab);
+  }
+
+  lastRouteSegments = nextSegments.slice();
+}
 
 document.addEventListener('keydown', handleNavigationShortcut);
 
@@ -327,6 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function handleRouteChange() {
   const segments = parseHash();
+  applyRouteUiState(segments);
   if (segments.length === 0) {
     navigateTo('#/doc-types');
     return;
@@ -477,6 +546,10 @@ function renderSidebar(segments) {
 }
 
 function renderMainContent(segments) {
+  if (segments[0] === 'doc-types' && segments[1] === 'new') {
+    return renderDocTypeCreatePage();
+  }
+
   if (state.loading && state.docTypes.length === 0) {
     return renderLoading('Đang tải dữ liệu mock...');
   }
@@ -495,6 +568,9 @@ function renderMainContent(segments) {
 
   if (segments[0] === 'doc-types' && segments[1]) {
     const docTypeId = Number(segments[1]);
+    if (Number.isNaN(docTypeId)) {
+      return `<div class="panel"><p>Không tìm thấy loại tài liệu yêu cầu.</p></div>`;
+    }
     const docType = state.docTypeDetails[docTypeId];
     if (!docType) {
       return renderLoading('Đang tải chi tiết loại tài liệu...');
@@ -569,13 +645,18 @@ function renderDocTypeList() {
         </td>
       </tr>
     `;
-  });
+  }).join('');
 
-  const createForm = uiState.showCreateDocType ? renderDocTypeCreateForm() : '';
-
-  const docTypeTableSection = uiState.showCreateDocType
-    ? ''
-    : `
+  return `
+    <div class="main-header">
+      <div>
+        <h2>Quản lý loại tài liệu</h2>
+        <p class="inline-hint">Danh sách ở dạng bảng giúp so sánh nhanh tập dữ liệu và lịch sử huấn luyện của từng loại.</p>
+      </div>
+      <div class="actions">
+        <button class="button" id="open-create-doc-type">+ Tạo loại tài liệu</button>
+      </div>
+    </div>
     <div class="panel">
       <div class="table-wrapper">
         <table class="doc-type-table">
@@ -593,25 +674,26 @@ function renderDocTypeList() {
             </tr>
           </thead>
           <tbody>
-            ${rows.join('') || '<tr><td colspan="9"><div class="empty-state">Chưa có loại tài liệu nào, hãy tạo mới.</div></td></tr>'}
+            ${rows || '<tr><td colspan="9"><div class="empty-state">Chưa có loại tài liệu nào, hãy tạo mới.</div></td></tr>'}
           </tbody>
         </table>
       </div>
     </div>
   `;
+}
 
+function renderDocTypeCreatePage() {
   return `
     <div class="main-header">
       <div>
-        <h2>Quản lý loại tài liệu</h2>
-        <p class="inline-hint">Danh sách ở dạng bảng giúp so sánh nhanh tập dữ liệu và lịch sử huấn luyện của từng loại.</p>
+        <h2>Tạo loại tài liệu</h2>
+        <p class="inline-hint">Thiết lập metadata và tải lên tài liệu mẫu ban đầu cho docType mới.</p>
       </div>
       <div class="actions">
-        <button class="button" id="open-create-doc-type">+ Tạo loại tài liệu</button>
+        <button class="button secondary" type="button" id="back-to-doc-type-list">Quay lại danh sách</button>
       </div>
     </div>
-    ${createForm}
-    ${docTypeTableSection}
+    ${renderDocTypeCreateForm()}
   `;
 }
 
@@ -1443,19 +1525,23 @@ function bindSidebarEvents() {
   if (createBtn) {
     createBtn.addEventListener('click', (event) => {
       event.preventDefault();
-      uiState.showCreateDocType = true;
-      navigateTo('#/doc-types');
+      navigateTo('#/doc-types/new');
     });
   }
 }
 
 function bindContentEvents(segments) {
-  if (segments[0] === 'doc-types' && !segments[1]) {
-    bindDocTypeListEvents();
-    return;
-  }
+  if (segments[0] === 'doc-types') {
+    if (segments[1] === 'new') {
+      bindDocTypeCreateEvents();
+      return;
+    }
 
-  if (segments[0] === 'doc-types' && segments[1]) {
+    if (!segments[1]) {
+      bindDocTypeListEvents();
+      return;
+    }
+
     const docTypeId = Number(segments[1]);
     const tab = normalizeDocTypeTab(segments[2]);
     switch (tab) {
@@ -1499,100 +1585,7 @@ function bindDocTypeListEvents() {
   const openBtn = document.getElementById('open-create-doc-type');
   if (openBtn) {
     openBtn.addEventListener('click', () => {
-      uiState.showCreateDocType = !uiState.showCreateDocType;
-      renderApp();
-    });
-  }
-
-  const cancelBtn = document.getElementById('cancel-create-doc-type');
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      uiState.showCreateDocType = false;
-      renderApp();
-    });
-  }
-
-  const form = document.getElementById('create-doc-type-form');
-  if (form) {
-    const sampleInput = form.querySelector('input[name="sampleFiles"]');
-    const sampleList = form.querySelector('[data-role="sample-file-list"]');
-
-    if (sampleInput && sampleList) {
-      const renderSelectedFiles = () => {
-        const files = Array.from(sampleInput.files || []).filter((file) => file && file.name);
-        if (!files.length) {
-          sampleList.innerHTML = '<li>Chưa chọn tài liệu nào</li>';
-          sampleList.classList.add('empty');
-          return;
-        }
-
-        sampleList.innerHTML = files
-          .map((file) => `<li>${escapeHtml(file.name)}</li>`)
-          .join('');
-        sampleList.classList.remove('empty');
-      };
-
-      renderSelectedFiles();
-      sampleInput.addEventListener('change', renderSelectedFiles);
-    }
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const payload = {
-        code: form.code.value.trim(),
-        name: form.name.value.trim(),
-        preferredMode: form.preferredMode.value,
-        description: form.description.value.trim() || null,
-        schemaJson: form.schemaJson.value.trim() || null,
-        ocrConfigJson: form.ocrConfigJson.value.trim() || null
-      };
-
-      const selectedFiles = sampleInput
-        ? Array.from(sampleInput.files || []).filter((file) => file && file.name)
-        : [];
-      const uploadedBy = form.sampleUploadedBy ? form.sampleUploadedBy.value.trim() : '';
-
-      try {
-        const created = await fetchJson(`${API_BASE}/doc-types`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        let message = 'Đã tạo loại tài liệu mới';
-        const newId = Number(getValue(created, 'Id'));
-        if (Number.isNaN(newId)) {
-          await loadDocTypeSummaries();
-          showToast(message);
-          navigateTo('#/doc-types');
-          return;
-        }
-
-        uiState.showCreateDocType = false;
-        state.docTypeDetails[newId] = created;
-
-        if (selectedFiles.length) {
-          const countLabel = selectedFiles.length === 1 ? '1 tài liệu mẫu' : `${selectedFiles.length} tài liệu mẫu`;
-          try {
-            await uploadSampleFilesForDocType(newId, selectedFiles, uploadedBy);
-            const refreshed = await ensureDocTypeDetail(newId, { force: true });
-            if (refreshed) {
-              state.docTypeDetails[newId] = refreshed;
-            }
-            message = `Đã tạo loại tài liệu mới và thêm ${countLabel}`;
-          } catch (uploadError) {
-            console.error(uploadError);
-            await ensureDocTypeDetail(newId, { force: true });
-            message = 'Đã tạo loại tài liệu mới nhưng upload tài liệu mẫu thất bại';
-          }
-        }
-
-        await loadDocTypeSummaries();
-        showToast(message);
-        navigateTo(`#/doc-types/${newId}/configuration`);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Không thể tạo docType');
-      }
+      navigateTo('#/doc-types/new');
     });
   }
 
@@ -1603,6 +1596,105 @@ function bindDocTypeListEvents() {
         navigateTo(`#/doc-types/${id}/configuration`);
       }
     });
+  });
+}
+
+function bindDocTypeCreateEvents() {
+  const backBtn = document.getElementById('back-to-doc-type-list');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      navigateTo('#/doc-types');
+    });
+  }
+
+  const form = document.getElementById('create-doc-type-form');
+  if (!form) {
+    return;
+  }
+
+  const cancelBtn = document.getElementById('cancel-create-doc-type');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      navigateTo('#/doc-types');
+    });
+  }
+
+  const sampleInput = form.querySelector('input[name="sampleFiles"]');
+  const sampleList = form.querySelector('[data-role="sample-file-list"]');
+
+  if (sampleInput && sampleList) {
+    const renderSelectedFiles = () => {
+      const files = Array.from(sampleInput.files || []).filter((file) => file && file.name);
+      if (!files.length) {
+        sampleList.innerHTML = '<li>Chưa chọn tài liệu nào</li>';
+        sampleList.classList.add('empty');
+        return;
+      }
+
+      sampleList.innerHTML = files.map((file) => `<li>${escapeHtml(file.name)}</li>`).join('');
+      sampleList.classList.remove('empty');
+    };
+
+    renderSelectedFiles();
+    sampleInput.addEventListener('change', renderSelectedFiles);
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {
+      code: form.code.value.trim(),
+      name: form.name.value.trim(),
+      preferredMode: form.preferredMode.value,
+      description: form.description.value.trim() || null,
+      schemaJson: form.schemaJson.value.trim() || null,
+      ocrConfigJson: form.ocrConfigJson.value.trim() || null
+    };
+
+    const selectedFiles = sampleInput
+      ? Array.from(sampleInput.files || []).filter((file) => file && file.name)
+      : [];
+    const uploadedBy = form.sampleUploadedBy ? form.sampleUploadedBy.value.trim() : '';
+
+    try {
+      const created = await fetchJson(`${API_BASE}/doc-types`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      let message = 'Đã tạo loại tài liệu mới';
+      const newId = Number(getValue(created, 'Id'));
+      if (Number.isNaN(newId)) {
+        await loadDocTypeSummaries();
+        showToast(message);
+        navigateTo('#/doc-types');
+        return;
+      }
+
+      state.docTypeDetails[newId] = created;
+
+      if (selectedFiles.length) {
+        const countLabel = selectedFiles.length === 1 ? '1 tài liệu mẫu' : `${selectedFiles.length} tài liệu mẫu`;
+        try {
+          await uploadSampleFilesForDocType(newId, selectedFiles, uploadedBy);
+          const refreshed = await ensureDocTypeDetail(newId, { force: true });
+          if (refreshed) {
+            state.docTypeDetails[newId] = refreshed;
+          }
+          message = `Đã tạo loại tài liệu mới và thêm ${countLabel}`;
+        } catch (uploadError) {
+          console.error(uploadError);
+          await ensureDocTypeDetail(newId, { force: true });
+          message = 'Đã tạo loại tài liệu mới nhưng upload tài liệu mẫu thất bại';
+        }
+      }
+
+      await loadDocTypeSummaries();
+      showToast(message);
+      navigateTo(`#/doc-types/${newId}/configuration`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể tạo docType');
+    }
   });
 }
 
