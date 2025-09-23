@@ -13,7 +13,9 @@ const uiState = {
   sampleFormFor: null,
   newTemplateFor: null,
   templateTestSelection: {},
-  newSamplerFor: null
+  newSamplerFor: null,
+  datasetFilterDocType: 'all',
+  trainingScope: {}
 };
 
 document.addEventListener('keydown', handleNavigationShortcut);
@@ -38,6 +40,273 @@ function handleNavigationShortcut(event) {
       window.location.href = '/admin';
     }
   }
+}
+
+function renderDatasetExplorer() {
+  const filterValue = uiState.datasetFilterDocType;
+  const options = state.docTypes
+    .map((dt) => {
+      const id = getValue(dt, 'Id');
+      const name = getValue(dt, 'Name');
+      return `<option value="${id}" ${filterValue === String(id) ? 'selected' : ''}>${escapeHtml(name)}</option>`;
+    })
+    .join('');
+
+  const allSamples = [];
+  state.docTypes.forEach((dt) => {
+    const id = getValue(dt, 'Id');
+    const detail = state.docTypeDetails[id];
+    if (!detail) {
+      return;
+    }
+    const docSamples = getValue(detail, 'Samples') || [];
+    docSamples.forEach((sample) => {
+      allSamples.push({
+        docTypeId: id,
+        docTypeName: getValue(dt, 'Name'),
+        sample
+      });
+    });
+  });
+
+  const filtered = allSamples.filter((entry) => {
+    if (filterValue === 'all') {
+      return true;
+    }
+    return String(entry.docTypeId) === filterValue;
+  });
+
+  filtered.sort((a, b) => {
+    const aUpdated = new Date(getValue(a.sample, 'UpdatedAt') || getValue(a.sample, 'UploadedAt') || 0).getTime();
+    const bUpdated = new Date(getValue(b.sample, 'UpdatedAt') || getValue(b.sample, 'UploadedAt') || 0).getTime();
+    return bUpdated - aUpdated;
+  });
+
+  let verified = 0;
+  let training = 0;
+  let accuracySum = 0;
+  let accuracyCount = 0;
+
+  const rows = filtered
+    .map(({ docTypeId, docTypeName, sample }) => {
+      const id = getValue(sample, 'Id');
+      const fileName = getValue(sample, 'FileName');
+      const status = getValue(sample, 'Status');
+      const isVerified = getValue(sample, 'IsVerified');
+      const included = getValue(sample, 'IncludedInTraining');
+      const accuracy = getValue(sample, 'Accuracy');
+      const updatedAt = formatDateTime(getValue(sample, 'UpdatedAt') || getValue(sample, 'UploadedAt'));
+
+      if (isVerified) {
+        verified += 1;
+      }
+      if (included) {
+        training += 1;
+      }
+      if (accuracy !== null && accuracy !== undefined && !Number.isNaN(Number(accuracy))) {
+        accuracySum += Number(accuracy);
+        accuracyCount += 1;
+      }
+
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(fileName)}</strong>
+            <div class="inline-hint">${escapeHtml(docTypeName)}</div>
+          </td>
+          <td>${escapeHtml(status)}</td>
+          <td>
+            <label class="checkbox-row">
+              <input type="checkbox" data-action="toggle-verify" data-id="${id}" data-doc-id="${docTypeId}" ${isVerified ? 'checked' : ''} />
+              Verify
+            </label>
+          </td>
+          <td>
+            <label class="checkbox-row">
+              <input type="checkbox" data-action="toggle-training" data-id="${id}" data-doc-id="${docTypeId}" ${included ? 'checked' : ''} ${getValue(sample, 'IsLabeled') ? '' : 'disabled'} />
+              Train
+            </label>
+          </td>
+          <td>${formatAccuracy(accuracy)}</td>
+          <td>${updatedAt}</td>
+          <td><a class="button secondary" href="#/samples/${id}">Chi tiết</a></td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  const averageAccuracy = accuracyCount ? `${(accuracySum / accuracyCount).toFixed(1)}%` : '—';
+
+  return `
+    <div class="main-header">
+      <div>
+        <h2>Kho dữ liệu huấn luyện</h2>
+        <p class="inline-hint">Theo dõi toàn bộ tài liệu đã upload, trạng thái verify và mức độ sẵn sàng cho huấn luyện.</p>
+      </div>
+      <div class="actions dataset-filter">
+        <label>Loại tài liệu
+          <select id="dataset-filter">
+            <option value="all" ${filterValue === 'all' ? 'selected' : ''}>Tất cả</option>
+            ${options}
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="meta-block">
+        <span>Tổng: ${filtered.length}</span>
+        <span>Verify: ${verified}</span>
+        <span>Trong tập train: ${training}</span>
+        <span>Độ chính xác TB: ${averageAccuracy}</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Tài liệu</th>
+              <th>Trạng thái</th>
+              <th>Verify</th>
+              <th>Huấn luyện</th>
+              <th>Độ chính xác</th>
+              <th>Cập nhật</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="7"><div class="empty-state">Không có tài liệu phù hợp bộ lọc.</div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderTrainingHub() {
+  const rows = state.docTypes.map((dt) => {
+    const id = getValue(dt, 'Id');
+    const name = getValue(dt, 'Name');
+    const dataset = getValue(dt, 'Dataset') || {};
+    const lastTraining = getValue(dt, 'LastTraining');
+    const mode = getValue(lastTraining, 'Mode');
+    const summary = getValue(lastTraining, 'Summary');
+    const completed = lastTraining ? formatDateTime(getValue(lastTraining, 'CompletedAt') || getValue(lastTraining, 'CreatedAt')) : '—';
+    const improvement = lastTraining && getValue(lastTraining, 'BaselineAccuracy') && getValue(lastTraining, 'ImprovedAccuracy')
+      ? `${formatAccuracy(getValue(lastTraining, 'BaselineAccuracy'))} → ${formatAccuracy(getValue(lastTraining, 'ImprovedAccuracy'))}`
+      : '—';
+
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(name)}</strong>
+          <div class="inline-hint">${getValue(dataset, 'Summary') || 'Chưa thiết lập tập dữ liệu'}</div>
+        </td>
+        <td>${formatAccuracy(getValue(dataset, 'AverageAccuracy'))}</td>
+        <td>${getValue(dataset, 'Verified') ?? 0}</td>
+        <td>${getValue(dataset, 'Training') ?? 0}</td>
+        <td>${completed}</td>
+        <td>${mode ? `<span class="badge-outline">${escapeHtml(mode)}</span>` : '—'}</td>
+        <td>${summary ? escapeHtml(summary) : '<span class="inline-hint">Chưa có</span>'}</td>
+        <td>${improvement}</td>
+        <td><button class="button" data-action="open-training" data-id="${id}">Quản lý huấn luyện</button></td>
+      </tr>
+    `;
+  });
+
+  return `
+    <div class="main-header">
+      <div>
+        <h2>Trung tâm huấn luyện</h2>
+        <p class="inline-hint">Chọn loại tài liệu để điều chỉnh tập dữ liệu và kích hoạt tối ưu OCR.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Loại tài liệu</th>
+              <th>Accuracy TB</th>
+              <th>Verify</th>
+              <th>Train</th>
+              <th>Huấn luyện gần nhất</th>
+              <th>Chế độ</th>
+              <th>Tóm tắt</th>
+              <th>Cải thiện</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join('') || '<tr><td colspan="9"><div class="empty-state">Chưa có loại tài liệu nào được cấu hình.</div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function bindDatasetExplorerEvents() {
+  const filter = document.getElementById('dataset-filter');
+  if (filter) {
+    filter.addEventListener('change', () => {
+      uiState.datasetFilterDocType = filter.value;
+      renderApp();
+    });
+  }
+
+  document.querySelectorAll('input[data-action="toggle-verify"]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const sampleId = Number(input.dataset.id);
+      const docTypeId = Number(input.dataset.docId);
+      const desired = input.checked;
+      try {
+        await fetchJson(`${API_BASE}/samples/${sampleId}/verify`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isVerified: desired })
+        });
+        await ensureDocTypeDetail(docTypeId, { force: true });
+        await loadDocTypeSummaries();
+        showToast(desired ? 'Đã đánh dấu verify' : 'Đã bỏ verify');
+        renderApp();
+      } catch (error) {
+        input.checked = !desired;
+        showToast(error instanceof Error ? error.message : 'Không thể cập nhật verify');
+      }
+    });
+  });
+
+  document.querySelectorAll('input[data-action="toggle-training"]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const sampleId = Number(input.dataset.id);
+      const docTypeId = Number(input.dataset.docId);
+      const desired = input.checked;
+      try {
+        await fetchJson(`${API_BASE}/samples/${sampleId}/training`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ includedInTraining: desired })
+        });
+        await ensureDocTypeDetail(docTypeId, { force: true });
+        await loadDocTypeSummaries();
+        showToast(desired ? 'Đã thêm vào tập train' : 'Đã loại khỏi tập train');
+        renderApp();
+      } catch (error) {
+        input.checked = !desired;
+        showToast(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái train');
+      }
+    });
+  });
+}
+
+function bindTrainingHubEvents() {
+  document.querySelectorAll('button[data-action="open-training"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.id);
+      if (!Number.isNaN(id)) {
+        navigateTo(`#/doc-types/${id}/training`);
+      }
+    });
+  });
 }
 
 function shouldIgnoreShortcutTarget(target) {
@@ -71,11 +340,19 @@ async function handleRouteChange() {
       await loadDocTypeSummaries();
     }
 
+    const topRoute = segments[0];
+
     if (segments[0] === 'doc-types' && segments[1]) {
       const docTypeId = Number(segments[1]);
       if (!Number.isNaN(docTypeId)) {
         await ensureDocTypeDetail(docTypeId);
       }
+    }
+
+    if ((topRoute === 'datasets' || topRoute === 'training') && state.docTypes.length) {
+      await Promise.all(
+        state.docTypes.map((dt) => ensureDocTypeDetail(getValue(dt, 'Id')))
+      );
     }
 
     if (segments[0] === 'samples' && segments[1]) {
@@ -158,25 +435,30 @@ function renderApp() {
 }
 
 function renderSidebar(segments) {
-  const currentDocTypeId = segments[0] === 'doc-types' && segments[1] ? Number(segments[1]) : null;
+  const topRoute = segments[0] || 'doc-types';
+  const currentDocTypeId = topRoute === 'doc-types' && segments[1] ? Number(segments[1]) : null;
   const docTypeLinks = state.docTypes
     .map((dt) => {
       const id = getValue(dt, 'Id');
       const name = getValue(dt, 'Name');
       const isActive = currentDocTypeId === id;
-      return `<a href="#/doc-types/${id}/overview" class="${isActive ? 'active' : ''}">${escapeHtml(name)}</a>`;
+      return `<a href="#/doc-types/${id}/configuration" class="${isActive ? 'active' : ''}">${escapeHtml(name)}</a>`;
     })
     .join('');
 
   return `
     <aside class="sidebar">
       <h1>OCR Suite Admin</h1>
-      <nav>
-        <a href="#/doc-types" class="${segments[0] === 'doc-types' && !segments[1] ? 'active' : ''}">Bảng điều khiển</a>
-        <div class="section-title">Loại tài liệu</div>
-        ${docTypeLinks || '<span class="inline-hint">Chưa có loại tài liệu</span>'}
-        <button class="linklike" id="sidebar-create-doc-type">+ Thêm loại tài liệu</button>
+      <nav class="primary-nav">
+        <a href="#/doc-types" class="${topRoute === 'doc-types' ? 'active' : ''}">Loại tài liệu</a>
+        <a href="#/datasets" class="${topRoute === 'datasets' ? 'active' : ''}">Tập dữ liệu</a>
+        <a href="#/training" class="${topRoute === 'training' ? 'active' : ''}">Huấn luyện</a>
       </nav>
+      <div class="section-title">Chi tiết loại tài liệu</div>
+      <div class="sidebar-docs">
+        ${docTypeLinks || '<span class="inline-hint">Chưa có loại tài liệu</span>'}
+      </div>
+      <button class="linklike" id="sidebar-create-doc-type">+ Thêm loại tài liệu</button>
     </aside>
   `;
 }
@@ -184,6 +466,14 @@ function renderSidebar(segments) {
 function renderMainContent(segments) {
   if (state.loading && state.docTypes.length === 0) {
     return renderLoading('Đang tải dữ liệu mock...');
+  }
+
+  if (segments[0] === 'datasets') {
+    return renderDatasetExplorer();
+  }
+
+  if (segments[0] === 'training') {
+    return renderTrainingHub();
   }
 
   if (segments[0] === 'doc-types' && !segments[1]) {
@@ -197,7 +487,7 @@ function renderMainContent(segments) {
       return renderLoading('Đang tải chi tiết loại tài liệu...');
     }
 
-    const tab = segments[2] || 'overview';
+    const tab = normalizeDocTypeTab(segments[2]);
     const extra = segments.slice(3);
     return renderDocTypeDetail(docType, tab, extra);
   }
@@ -224,38 +514,47 @@ function renderLoading(message) {
 }
 
 function renderDocTypeList() {
-  const cards = state.docTypes.map((dt) => {
+  const rows = state.docTypes.map((dt) => {
     const id = getValue(dt, 'Id');
     const code = getValue(dt, 'Code');
     const name = getValue(dt, 'Name');
     const preferredMode = getValue(dt, 'PreferredMode');
+    const dataset = getValue(dt, 'Dataset') || {};
     const stats = getValue(dt, 'Stats') || {};
-    const activeTemplate = getValue(dt, 'ActiveTemplate');
     const lastTraining = getValue(dt, 'LastTraining');
     const updatedAt = formatDateTime(getValue(dt, 'UpdatedAt'));
+    const datasetSummary = getValue(dataset, 'Summary') || '';
+    const lastTrainingTime = lastTraining
+      ? formatDateTime(getValue(lastTraining, 'CompletedAt') || getValue(lastTraining, 'CreatedAt'))
+      : '—';
+    const improvement = lastTraining && getValue(lastTraining, 'BaselineAccuracy') && getValue(lastTraining, 'ImprovedAccuracy')
+      ? `${formatAccuracy(getValue(lastTraining, 'ImprovedAccuracy'))} (${formatAccuracy(getValue(lastTraining, 'BaselineAccuracy'))} → ${formatAccuracy(getValue(lastTraining, 'ImprovedAccuracy'))})`
+      : '—';
 
     return `
-      <div class="panel">
-        <div class="flex-between">
-          <div>
-            <h3>${escapeHtml(name)}</h3>
-            <p class="inline-hint">Mã: ${escapeHtml(code)}</p>
+      <tr>
+        <td>
+          <strong>${escapeHtml(name)}</strong>
+          <div class="inline-hint">Mã: ${escapeHtml(code)}</div>
+        </td>
+        <td><span class="mode-pill">${escapeHtml(preferredMode || 'AUTO')}</span></td>
+        <td>${stats.Samples ?? 0}</td>
+        <td>${getValue(dataset, 'Verified') ?? 0}</td>
+        <td>${getValue(dataset, 'Training') ?? 0}</td>
+        <td>${formatAccuracy(getValue(dataset, 'AverageAccuracy'))}</td>
+        <td>
+          ${lastTraining ? escapeHtml(datasetSummary || '') : '<span class="inline-hint">Chưa huấn luyện</span>'}
+          <div class="inline-hint">${lastTrainingTime}</div>
+        </td>
+        <td>${improvement}</td>
+        <td>
+          <div class="table-actions">
+            <a class="button" href="#/doc-types/${id}/configuration">Quản lý</a>
+            <button class="button secondary" type="button" data-action="view-doc" data-id="${id}">Chi tiết</button>
           </div>
-          <span class="mode-pill">${escapeHtml(preferredMode || 'AUTO')}</span>
-        </div>
-        <div class="meta-block">
-          <span>${stats.Samples ?? 0} mẫu (${stats.Labeled ?? 0} đã gán nhãn)</span>
-          <span>${stats.Templates ?? 0} template</span>
-          <span>${stats.Samplers ?? 0} sampler</span>
-        </div>
-        ${activeTemplate ? `<span class="badge">Template active: ${escapeHtml(activeTemplate)}</span>` : ''}
-        ${lastTraining ? `<p class="inline-hint">Huấn luyện gần nhất: ${formatDateTime(getValue(lastTraining, 'CompletedAt') || getValue(lastTraining, 'CreatedAt'))}</p>` : ''}
-        <div class="form-actions">
-          <a class="button" href="#/doc-types/${id}/overview">Quản lý</a>
-          <button class="button secondary" type="button" data-action="view-doc" data-id="${id}">Xem chi tiết</button>
-        </div>
-        <p class="inline-hint">Cập nhật: ${updatedAt}</p>
-      </div>
+          <div class="inline-hint">Cập nhật: ${updatedAt}</div>
+        </td>
+      </tr>
     `;
   });
 
@@ -263,14 +562,36 @@ function renderDocTypeList() {
 
   return `
     <div class="main-header">
-      <h2>Quản lý loại tài liệu</h2>
+      <div>
+        <h2>Quản lý loại tài liệu</h2>
+        <p class="inline-hint">Danh sách ở dạng bảng giúp so sánh nhanh tập dữ liệu và lịch sử huấn luyện của từng loại.</p>
+      </div>
       <div class="actions">
         <button class="button" id="open-create-doc-type">+ Tạo loại tài liệu</button>
       </div>
     </div>
     ${createForm}
-    <div class="grid columns-2">
-      ${cards.join('') || '<div class="empty-state">Chưa có loại tài liệu nào, hãy tạo mới.</div>'}
+    <div class="panel">
+      <div class="table-wrapper">
+        <table class="doc-type-table">
+          <thead>
+            <tr>
+              <th>Loại tài liệu</th>
+              <th>Chế độ</th>
+              <th>Tổng mẫu</th>
+              <th>Đã verify</th>
+              <th>Trong tập train</th>
+              <th>Độ chính xác TB</th>
+              <th>Tập dữ liệu huấn luyện</th>
+              <th>Hiệu quả</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join('') || '<tr><td colspan="9"><div class="empty-state">Chưa có loại tài liệu nào, hãy tạo mới.</div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 }
@@ -317,6 +638,17 @@ function renderDocTypeCreateForm() {
   `;
 }
 
+function normalizeDocTypeTab(value) {
+  const normalized = (value || 'configuration').toLowerCase();
+  if (normalized === 'overview' || normalized === 'configuration') {
+    return 'configuration';
+  }
+  if (normalized === 'samples' || normalized === 'dataset') {
+    return 'dataset';
+  }
+  return normalized;
+}
+
 function renderDocTypeDetail(docType, tab, extra) {
   const id = getValue(docType, 'Id');
   const name = getValue(docType, 'Name');
@@ -325,8 +657,8 @@ function renderDocTypeDetail(docType, tab, extra) {
   const description = getValue(docType, 'Description');
 
   const tabs = [
-    { key: 'overview', label: 'Tổng quan' },
-    { key: 'samples', label: 'Samples' },
+    { key: 'configuration', label: 'Cấu hình' },
+    { key: 'dataset', label: 'Tập dữ liệu' },
     { key: 'templates', label: 'Templates' },
     { key: 'samplers', label: 'Samplers' },
     { key: 'training', label: 'Huấn luyện' }
@@ -338,8 +670,8 @@ function renderDocTypeDetail(docType, tab, extra) {
 
   let content = '';
   switch (tab) {
-    case 'samples':
-      content = renderDocTypeSamples(docType);
+    case 'dataset':
+      content = renderDocTypeDataset(docType);
       break;
     case 'templates':
       content = renderDocTypeTemplates(docType, extra);
@@ -350,9 +682,9 @@ function renderDocTypeDetail(docType, tab, extra) {
     case 'training':
       content = renderDocTypeTraining(docType);
       break;
-    case 'overview':
+    case 'configuration':
     default:
-      content = renderDocTypeOverview(docType);
+      content = renderDocTypeConfiguration(docType);
       break;
   }
 
@@ -365,40 +697,69 @@ function renderDocTypeDetail(docType, tab, extra) {
       <div class="actions">
         <span class="mode-pill">${escapeHtml(preferredMode || 'AUTO')}</span>
         <button class="button secondary" type="button" id="refresh-doc-type">Làm mới</button>
-        <a class="button" href="#/doc-types/${id}/samples">Xem samples</a>
+        <a class="button" href="#/doc-types/${id}/dataset">Tập dữ liệu</a>
       </div>
     </div>
     <div class="alert-info">
       ${escapeHtml(description || 'Chưa có mô tả.')}<br/>
-      <span class="inline-hint">Chọn tab để quản lý chi tiết: sample, template, sampler và huấn luyện.</span>
+      <span class="inline-hint">Chọn tab để quản lý cấu hình, tập dữ liệu, template, sampler và huấn luyện.</span>
     </div>
     <div class="tab-nav">${tabNav}</div>
     ${content}
   `;
 }
 
-function renderDocTypeOverview(docType) {
+function renderDocTypeConfiguration(docType) {
   const schema = getValue(docType, 'SchemaJson');
   const ocrConfig = getValue(docType, 'OcrConfigJson');
   const createdAt = formatDateTime(getValue(docType, 'CreatedAt'));
   const updatedAt = formatDateTime(getValue(docType, 'UpdatedAt'));
   const samples = getValue(docType, 'Samples') || [];
-  const labeled = samples.filter((s) => getValue(s, 'IsLabeled')).length;
   const templates = getValue(docType, 'Templates') || [];
   const samplers = getValue(docType, 'Samplers') || [];
+  const dataset = getValue(docType, 'Dataset') || {};
   const lastTraining = (getValue(docType, 'TrainingJobs') || [])[0];
+  const total = dataset.Total ?? samples.length;
+  const verified = dataset.Verified ?? samples.filter((s) => getValue(s, 'IsVerified')).length;
+  const training = dataset.Training ?? samples.filter((s) => getValue(s, 'IncludedInTraining')).length;
+  const averageAccuracy = formatAccuracy(getValue(dataset, 'AverageAccuracy'));
+  const evaluations = getValue(dataset, 'RecentEvaluations') || [];
+
+  const evaluationHistory = evaluations.length
+    ? `
+        <div class="panel">
+          <h3>Đánh giá gần đây</h3>
+          <div class="history-list">
+            ${evaluations
+              .map((item) => `
+                <div class="history-item">
+                  <h4>${escapeHtml(getValue(item, 'SampleFileName') || 'Sample #'+getValue(item, 'SampleId'))}</h4>
+                  <p><strong>${formatAccuracy(getValue(item, 'Accuracy'))}</strong> · ${escapeHtml(getValue(item, 'Notes') || '')}</p>
+                  <time>${formatDateTime(getValue(item, 'ComparedAt'))}</time>
+                </div>
+              `)
+              .join('')}
+          </div>
+        </div>
+      `
+    : '';
 
   return `
-    <div class="grid columns-2">
-      <div class="stat-card">
-        <h4>Tổng số mẫu</h4>
-        <strong>${samples.length}</strong>
-        <span class="inline-hint">${labeled} mẫu đã gán nhãn</span>
+    <div class="grid columns-3 metric-grid">
+      <div class="metric-card">
+        <h4>Tài liệu đang quản lý</h4>
+        <strong>${total}</strong>
+        <span class="inline-hint">${verified} đã verify · ${training} dùng huấn luyện</span>
       </div>
-      <div class="stat-card">
+      <div class="metric-card">
         <h4>Templates & Samplers</h4>
         <strong>${templates.length} template</strong>
         <span class="inline-hint">${samplers.length} sampler khả dụng</span>
+      </div>
+      <div class="metric-card">
+        <h4>Độ chính xác trung bình</h4>
+        <strong>${averageAccuracy}</strong>
+        <span class="inline-hint">Cập nhật gần nhất: ${updatedAt}</span>
       </div>
     </div>
     <form class="panel" id="doc-type-form" data-doc-id="${getValue(docType, 'Id')}">
@@ -433,6 +794,7 @@ function renderDocTypeOverview(docType) {
       <p class="inline-hint">Tạo: ${createdAt} · Cập nhật: ${updatedAt}</p>
     </form>
     ${lastTraining ? renderLastTraining(lastTraining) : ''}
+    ${evaluationHistory}
   `;
 }
 function renderLastTraining(job) {
@@ -440,28 +802,48 @@ function renderLastTraining(job) {
   const created = formatDateTime(getValue(job, 'CreatedAt'));
   const completed = formatDateTime(getValue(job, 'CompletedAt'));
   const mode = getValue(job, 'Mode');
+  const datasetSummary = getValue(job, 'DatasetSummary');
+  const improvement = getValue(job, 'BaselineAccuracy') && getValue(job, 'ImprovedAccuracy')
+    ? `${formatAccuracy(getValue(job, 'BaselineAccuracy'))} → ${formatAccuracy(getValue(job, 'ImprovedAccuracy'))}`
+    : null;
   return `
     <div class="panel">
       <h3>Huấn luyện gần nhất</h3>
       <p><span class="badge-outline">${escapeHtml(mode)}</span> · Bắt đầu: ${created}</p>
       <p class="inline-hint">Hoàn tất: ${completed}</p>
       <p>${escapeHtml(summary || '')}</p>
+      ${datasetSummary ? `<p class="inline-hint">Dataset: ${escapeHtml(datasetSummary)}</p>` : ''}
+      ${improvement ? `<p class="inline-hint">Accuracy: ${improvement}</p>` : ''}
     </div>
   `;
 }
 
-function renderDocTypeSamples(docType) {
+function renderDocTypeDataset(docType) {
   const docTypeId = getValue(docType, 'Id');
   const samples = getValue(docType, 'Samples') || [];
+  const dataset = getValue(docType, 'Dataset') || {};
+  const total = dataset.Total ?? samples.length;
+  const verified = dataset.Verified ?? samples.filter((s) => getValue(s, 'IsVerified')).length;
+  const training = dataset.Training ?? samples.filter((s) => getValue(s, 'IncludedInTraining')).length;
+  const averageAccuracy = formatAccuracy(getValue(dataset, 'AverageAccuracy'));
+
   const rows = samples
     .map((sample) => {
       const id = getValue(sample, 'Id');
       const fileName = getValue(sample, 'FileName');
       const status = getValue(sample, 'Status');
       const isLabeled = getValue(sample, 'IsLabeled');
+      const isVerified = getValue(sample, 'IsVerified');
+      const included = getValue(sample, 'IncludedInTraining');
       const uploadedBy = getValue(sample, 'UploadedBy');
       const uploadedAt = formatDateTime(getValue(sample, 'UploadedAt'));
       const updatedAt = formatDateTime(getValue(sample, 'UpdatedAt') || getValue(sample, 'UploadedAt'));
+      const accuracy = formatAccuracy(getValue(sample, 'Accuracy'));
+      const comparisons = getValue(sample, 'ComparisonHistory') || [];
+      const latest = comparisons[0] || null;
+      const comparedAt = latest ? formatDateTime(getValue(latest, 'ComparedAt')) : '—';
+      const compareNote = latest ? escapeHtml(getValue(latest, 'Notes') || '') : '<span class="inline-hint">Chưa có</span>';
+
       return `
         <tr>
           <td>
@@ -469,9 +851,25 @@ function renderDocTypeSamples(docType) {
             <div class="inline-hint">Upload bởi ${escapeHtml(uploadedBy)} · ${uploadedAt}</div>
           </td>
           <td>${escapeHtml(status)}</td>
-          <td>${isLabeled ? '<span class="badge success">Đã gán nhãn</span>' : '<span class="badge danger">Chưa gán nhãn</span>'}</td>
-          <td>${updatedAt}</td>
-          <td><a class="button secondary" href="#/samples/${id}">Label</a></td>
+          <td>
+            <label class="checkbox-row">
+              <input type="checkbox" data-action="toggle-verify" data-id="${id}" ${isVerified ? 'checked' : ''} />
+              Đã xác minh
+            </label>
+          </td>
+          <td>
+            <label class="checkbox-row">
+              <input type="checkbox" data-action="toggle-training" data-id="${id}" ${included ? 'checked' : ''} ${isLabeled ? '' : 'disabled'} />
+              Dùng để train
+            </label>
+            ${isLabeled ? '' : '<div class="inline-hint">Cần gán nhãn trước</div>'}
+          </td>
+          <td>${accuracy}</td>
+          <td>
+            ${comparedAt}
+            <div class="inline-hint">${compareNote}</div>
+          </td>
+          <td><a class="button secondary" href="#/samples/${id}">Chi tiết</a></td>
         </tr>
       `;
     })
@@ -482,8 +880,11 @@ function renderDocTypeSamples(docType) {
   return `
     <div class="panel">
       <div class="flex-between">
-        <h3>Danh sách mẫu (${samples.length})</h3>
-        <button class="button" type="button" data-action="toggle-create-sample" data-id="${docTypeId}">+ Thêm mẫu</button>
+        <div>
+          <h3>Tập dữ liệu (${total})</h3>
+          <div class="inline-hint">${verified} đã verify · ${training} dùng huấn luyện · Độ chính xác TB ${averageAccuracy}</div>
+        </div>
+        <button class="button" type="button" data-action="toggle-create-sample" data-id="${docTypeId}">+ Thêm tài liệu</button>
       </div>
       ${createForm}
       ${samples.length ? `
@@ -491,10 +892,12 @@ function renderDocTypeSamples(docType) {
           <table>
             <thead>
               <tr>
-                <th>Tên file</th>
+                <th>Tài liệu</th>
                 <th>Trạng thái</th>
-                <th>Label</th>
-                <th>Cập nhật</th>
+                <th>Verify</th>
+                <th>Huấn luyện</th>
+                <th>Độ chính xác</th>
+                <th>So sánh gần nhất</th>
                 <th></th>
               </tr>
             </thead>
@@ -503,7 +906,32 @@ function renderDocTypeSamples(docType) {
             </tbody>
           </table>
         </div>
-      ` : '<div class="empty-state">Chưa có mẫu nào, hãy thêm mẫu mới.</div>'}
+      ` : '<div class="empty-state">Chưa có mẫu nào, hãy thêm tài liệu mới.</div>'}
+    </div>
+    ${renderDatasetInsights(dataset)}
+  `;
+}
+
+function renderDatasetInsights(dataset) {
+  const evaluations = getValue(dataset, 'RecentEvaluations') || [];
+  if (!evaluations.length) {
+    return '';
+  }
+
+  const items = evaluations
+    .map((item) => `
+      <div class="history-item">
+        <h4>${escapeHtml(getValue(item, 'SampleFileName') || 'Sample #' + getValue(item, 'SampleId'))}</h4>
+        <p><strong>${formatAccuracy(getValue(item, 'Accuracy'))}</strong> · ${escapeHtml(getValue(item, 'Notes') || '')}</p>
+        <time>${formatDateTime(getValue(item, 'ComparedAt'))}</time>
+      </div>
+    `)
+    .join('');
+
+  return `
+    <div class="panel">
+      <h3>Đánh giá gần đây</h3>
+      <div class="history-list">${items}</div>
     </div>
   `;
 }
@@ -793,15 +1221,28 @@ function renderSamplerCreateForm(docTypeId) {
 
 function renderDocTypeTraining(docType) {
   const docTypeId = getValue(docType, 'Id');
+  const dataset = getValue(docType, 'Dataset') || {};
+  const samples = getValue(docType, 'Samples') || [];
+  const labeled = dataset.Labeled ?? samples.filter((s) => getValue(s, 'IsLabeled')).length;
+  const verified = dataset.Verified ?? samples.filter((s) => getValue(s, 'IsVerified')).length;
+  const trainingReady = dataset.Training ?? samples.filter((s) => getValue(s, 'IncludedInTraining')).length;
+  const averageAccuracy = formatAccuracy(getValue(dataset, 'AverageAccuracy'));
+  const selectedScope = uiState.trainingScope[docTypeId] || 'verified';
   const jobs = getValue(docType, 'TrainingJobs') || [];
   const history = jobs
     .map((job) => {
+      const datasetSummary = getValue(job, 'DatasetSummary');
+      const improvement = getValue(job, 'BaselineAccuracy') && getValue(job, 'ImprovedAccuracy')
+        ? `${formatAccuracy(getValue(job, 'BaselineAccuracy'))} → ${formatAccuracy(getValue(job, 'ImprovedAccuracy'))}`
+        : '';
       return `
         <div class="history-item">
           <h4>${escapeHtml(getValue(job, 'Mode'))} · ${escapeHtml(getValue(job, 'Status'))}</h4>
           <time>Bắt đầu: ${formatDateTime(getValue(job, 'CreatedAt'))}</time><br/>
           <time>Hoàn tất: ${formatDateTime(getValue(job, 'CompletedAt'))}</time>
           <p>${escapeHtml(getValue(job, 'Summary') || '')}</p>
+          ${datasetSummary ? `<p class="inline-hint">Dataset: ${escapeHtml(datasetSummary)}</p>` : ''}
+          ${improvement ? `<p class="inline-hint">Accuracy: ${improvement}</p>` : ''}
         </div>
       `;
     })
@@ -819,12 +1260,27 @@ function renderDocTypeTraining(docType) {
           </select>
         </div>
         <div class="form-field">
+          <label>Tập dữ liệu</label>
+          <select name="datasetScope">
+            <option value="verified" ${selectedScope === 'verified' ? 'selected' : ''}>Chỉ mẫu đã verify (${verified})</option>
+            <option value="all" ${selectedScope === 'all' ? 'selected' : ''}>Toàn bộ mẫu gán nhãn (${labeled})</option>
+            <option value="latest" ${selectedScope === 'latest' ? 'selected' : ''}>10 mẫu mới nhất</option>
+          </select>
+          <span class="inline-hint">Chỉ những tài liệu đã gán nhãn mới được sử dụng khi huấn luyện.</span>
+        </div>
+        <div class="form-field">
           <label>Ghi chú</label>
           <textarea name="notes" class="small" placeholder="Mô tả kỳ vọng, ví dụ: Tối ưu whitelist"></textarea>
         </div>
       </div>
       <div class="form-actions">
         <button class="button" type="submit">Chạy huấn luyện</button>
+      </div>
+      <div class="meta-block">
+        <span>Tổng gán nhãn: ${labeled}</span>
+        <span>Verify: ${verified}</span>
+        <span>Đang huấn luyện: ${trainingReady}</span>
+        <span>Accuracy hiện tại: ${averageAccuracy}</span>
       </div>
     </form>
     <div class="panel">
@@ -844,12 +1300,17 @@ function renderSampleDetail(sample) {
   const previewUrl = getValue(sample, 'PreviewUrl');
   const status = getValue(sample, 'Status');
   const isLabeled = getValue(sample, 'IsLabeled');
+  const isVerified = getValue(sample, 'IsVerified');
+  const includedInTraining = getValue(sample, 'IncludedInTraining');
+  const accuracy = formatAccuracy(getValue(sample, 'Accuracy'));
   const uploadedAt = formatDateTime(getValue(sample, 'UploadedAt'));
   const updatedAt = formatDateTime(getValue(sample, 'UpdatedAt') || getValue(sample, 'UploadedAt'));
   const ocrPreview = getValue(sample, 'OcrPreview') || '';
   const labeledText = getValue(sample, 'LabeledText') || '';
   const notes = getValue(sample, 'Notes') || '';
   const suggested = getValue(sample, 'SuggestedFields');
+  const lastOutput = getValue(sample, 'LastOcrOutput');
+  const comparisons = getValue(sample, 'ComparisonHistory') || [];
 
   return `
     <div class="main-header">
@@ -858,7 +1319,7 @@ function renderSampleDetail(sample) {
         <p class="inline-hint">DocType: ${escapeHtml(docName)} · ID: ${docTypeId}</p>
       </div>
       <div class="actions">
-        <a class="button secondary" href="#/doc-types/${docTypeId}/samples">Quay lại samples</a>
+        <a class="button secondary" href="#/doc-types/${docTypeId}/dataset">Quay lại tập dữ liệu</a>
       </div>
     </div>
     <div class="panel sample-preview">
@@ -867,8 +1328,11 @@ function renderSampleDetail(sample) {
         <div class="meta-block">
           <span>Trạng thái: ${escapeHtml(status)}</span>
           <span>${isLabeled ? '<span class="badge success">Đã gán nhãn</span>' : '<span class="badge danger">Chưa gán nhãn</span>'}</span>
+          <span>${isVerified ? '<span class="badge success">Đã verify</span>' : '<span class="badge danger">Chưa verify</span>'}</span>
+          <span>${includedInTraining ? '<span class="badge">Trong tập train</span>' : '<span class="badge-outline">Ngoài tập train</span>'}</span>
           <span>Upload: ${uploadedAt}</span>
           <span>Cập nhật: ${updatedAt}</span>
+          <span>Accuracy: ${accuracy}</span>
         </div>
       </div>
       <div>
@@ -876,6 +1340,12 @@ function renderSampleDetail(sample) {
         <pre>${escapeHtml(ocrPreview)}</pre>
       </div>
     </div>
+    ${lastOutput ? `
+      <div class="panel">
+        <h3>Output OCR được sử dụng so sánh</h3>
+        <pre>${escapeHtml(JSON.stringify(lastOutput, null, 2))}</pre>
+      </div>
+    ` : ''}
     ${suggested ? `
       <div class="panel">
         <h3>Gợi ý trường từ OCR</h3>
@@ -883,8 +1353,35 @@ function renderSampleDetail(sample) {
         <button class="button secondary" type="button" id="apply-suggestion">Áp dụng gợi ý</button>
       </div>
     ` : ''}
+    ${comparisons.length ? `
+      <div class="panel">
+        <h3>Lịch sử so sánh</h3>
+        <div class="history-list">
+          ${comparisons
+            .map((entry) => `
+              <div class="history-item">
+                <h4>${formatAccuracy(getValue(entry, 'Accuracy'))}</h4>
+                <p>${escapeHtml(getValue(entry, 'Notes') || '')}</p>
+                <time>${formatDateTime(getValue(entry, 'ComparedAt'))}</time>
+              </div>
+            `)
+            .join('')}
+        </div>
+      </div>
+    ` : ''}
     <form class="panel" id="label-form" data-sample-id="${sampleId}" data-doc-id="${docTypeId}">
       <h3>Gán nhãn mẫu</h3>
+      <div class="form-field inline-toggles">
+        <label class="checkbox-row">
+          <input type="checkbox" name="isVerified" ${isVerified ? 'checked' : ''} />
+          Đã xác minh output
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="includeInTraining" ${includedInTraining ? 'checked' : ''} ${isLabeled ? '' : 'disabled'} />
+          Dùng cho huấn luyện
+        </label>
+        ${isLabeled ? '' : '<span class="inline-hint">Cần gán nhãn để thêm vào tập train</span>'}
+      </div>
       <div class="form-field">
         <label>Full text chuẩn hóa</label>
         <textarea name="labeledText" class="small" placeholder="Nhập full text chuẩn hóa...">${escapeHtml(labeledText)}</textarea>
@@ -923,10 +1420,10 @@ function bindContentEvents(segments) {
 
   if (segments[0] === 'doc-types' && segments[1]) {
     const docTypeId = Number(segments[1]);
-    const tab = segments[2] || 'overview';
+    const tab = normalizeDocTypeTab(segments[2]);
     switch (tab) {
-      case 'samples':
-        bindDocTypeSamplesEvents(docTypeId);
+      case 'dataset':
+        bindDocTypeDatasetEvents(docTypeId);
         break;
       case 'templates':
         bindDocTypeTemplatesEvents(docTypeId);
@@ -937,11 +1434,21 @@ function bindContentEvents(segments) {
       case 'training':
         bindDocTypeTrainingEvents(docTypeId);
         break;
-      case 'overview':
+      case 'configuration':
       default:
-        bindDocTypeOverviewEvents(docTypeId);
+        bindDocTypeConfigurationEvents(docTypeId);
         break;
     }
+    return;
+  }
+
+  if (segments[0] === 'datasets') {
+    bindDatasetExplorerEvents();
+    return;
+  }
+
+  if (segments[0] === 'training') {
+    bindTrainingHubEvents();
     return;
   }
 
@@ -993,7 +1500,7 @@ function bindDocTypeListEvents() {
         state.docTypeDetails[newId] = created;
         await loadDocTypeSummaries();
         showToast('Đã tạo loại tài liệu mới');
-        navigateTo(`#/doc-types/${newId}/overview`);
+        navigateTo(`#/doc-types/${newId}/configuration`);
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể tạo docType');
       }
@@ -1004,13 +1511,13 @@ function bindDocTypeListEvents() {
     btn.addEventListener('click', () => {
       const id = Number(btn.dataset.id);
       if (!Number.isNaN(id)) {
-        navigateTo(`#/doc-types/${id}/overview`);
+        navigateTo(`#/doc-types/${id}/configuration`);
       }
     });
   });
 }
 
-function bindDocTypeOverviewEvents(docTypeId) {
+function bindDocTypeConfigurationEvents(docTypeId) {
   const refreshBtn = document.getElementById('refresh-doc-type');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', async () => {
@@ -1051,7 +1558,7 @@ function bindDocTypeOverviewEvents(docTypeId) {
   }
 }
 
-function bindDocTypeSamplesEvents(docTypeId) {
+function bindDocTypeDatasetEvents(docTypeId) {
   document.querySelectorAll('button[data-action="toggle-create-sample"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = Number(btn.dataset.id);
@@ -1093,6 +1600,46 @@ function bindDocTypeSamplesEvents(docTypeId) {
       }
     });
   }
+
+  document.querySelectorAll('input[data-action="toggle-verify"]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const sampleId = Number(input.dataset.id);
+      const desired = input.checked;
+      try {
+        await fetchJson(`${API_BASE}/samples/${sampleId}/verify`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isVerified: desired })
+        });
+        await ensureDocTypeDetail(docTypeId, { force: true });
+        await loadDocTypeSummaries();
+        showToast(desired ? 'Đã đánh dấu verify' : 'Đã bỏ đánh dấu verify');
+      } catch (error) {
+        input.checked = !desired;
+        showToast(error instanceof Error ? error.message : 'Cập nhật verify thất bại');
+      }
+    });
+  });
+
+  document.querySelectorAll('input[data-action="toggle-training"]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const sampleId = Number(input.dataset.id);
+      const desired = input.checked;
+      try {
+        await fetchJson(`${API_BASE}/samples/${sampleId}/training`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ includedInTraining: desired })
+        });
+        await ensureDocTypeDetail(docTypeId, { force: true });
+        await loadDocTypeSummaries();
+        showToast(desired ? 'Đã thêm vào tập huấn luyện' : 'Đã loại khỏi tập huấn luyện');
+      } catch (error) {
+        input.checked = !desired;
+        showToast(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái huấn luyện');
+      }
+    });
+  });
 }
 
 function bindDocTypeTemplatesEvents(docTypeId) {
@@ -1280,11 +1827,20 @@ function bindDocTypeSamplersEvents(docTypeId) {
 function bindDocTypeTrainingEvents(docTypeId) {
   const form = document.getElementById('train-form');
   if (form) {
+    const scopeSelect = form.querySelector('select[name="datasetScope"]');
+    if (scopeSelect) {
+      scopeSelect.value = uiState.trainingScope[docTypeId] || scopeSelect.value || 'verified';
+      scopeSelect.addEventListener('change', () => {
+        uiState.trainingScope[docTypeId] = scopeSelect.value;
+      });
+    }
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const payload = {
         mode: form.mode.value,
-        notes: form.notes.value.trim() || null
+        notes: form.notes.value.trim() || null,
+        datasetScope: scopeSelect ? scopeSelect.value : 'verified'
       };
 
       try {
@@ -1345,6 +1901,8 @@ function bindSampleDetailEvents(sampleId) {
   if (form && container) {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const verifiedInput = form.querySelector('input[name="isVerified"]');
+      const trainingInput = form.querySelector('input[name="includeInTraining"]');
       const fields = {};
       container.querySelectorAll('.field-row').forEach((row) => {
         const keyInput = row.querySelector('input[name="field-key"]');
@@ -1359,7 +1917,9 @@ function bindSampleDetailEvents(sampleId) {
       const payload = {
         labeledText: form.labeledText.value.trim() || null,
         notes: form.notes.value.trim() || null,
-        fields
+        fields,
+        isVerified: verifiedInput ? verifiedInput.checked : undefined,
+        includeInTraining: trainingInput && !trainingInput.disabled ? trainingInput.checked : undefined
       };
 
       const docTypeId = Number(form.dataset.docId);
@@ -1442,6 +2002,17 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) {
   return escapeHtml(value);
+}
+
+function formatAccuracy(value) {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  const number = Number(value);
+  if (Number.isNaN(number)) {
+    return '—';
+  }
+  return `${number.toFixed(1)}%`;
 }
 
 function formatDateTime(value) {

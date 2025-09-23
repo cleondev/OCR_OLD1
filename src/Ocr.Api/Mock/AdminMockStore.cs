@@ -3,6 +3,7 @@ namespace Ocr.Api.Mock;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Ocr.Core;
 
 public sealed class AdminMockStore
@@ -189,6 +190,12 @@ public sealed class AdminMockStore
     public MockSample CreateSample(int docTypeId, SampleCreateRequest request)
     {
         var docType = FindDocType(docTypeId) ?? throw new InvalidOperationException("Document type not found");
+        var suggested = new Dictionary<string, string>
+        {
+            ["id"] = "001099002233",
+            ["name"] = "Nguyen Van Demo",
+            ["dob"] = "12/03/1992"
+        };
         var sample = new MockSample
         {
             Id = _nextSampleId++,
@@ -199,15 +206,14 @@ public sealed class AdminMockStore
             PreviewUrl = SamplePreviewPlaceholders[_nextSampleId % SamplePreviewPlaceholders.Length],
             Status = "Uploaded",
             OcrPreview = "Giấy tờ chưa qua gán nhãn. Vui lòng mở màn hình labeling để hoàn tất.",
-            SuggestedFields = new Dictionary<string, string>
-            {
-                ["id"] = "001099002233",
-                ["name"] = "Nguyen Van Demo",
-                ["dob"] = "12/03/1992"
-            }
+            SuggestedFields = suggested,
+            LastOcrOutput = new Dictionary<string, string>(suggested, StringComparer.OrdinalIgnoreCase),
+            IncludedInTraining = false,
+            IsVerified = false
         };
 
         docType.Samples.Insert(0, sample);
+        EvaluateAgainstBaseline(docType, sample);
         docType.UpdatedAt = sample.UploadedAt;
         return sample;
     }
@@ -220,12 +226,78 @@ public sealed class AdminMockStore
         sample.Notes = request.Notes?.Trim();
         sample.IsLabeled = sample.Fields.Count > 0 || !string.IsNullOrWhiteSpace(sample.LabeledText);
         sample.Status = sample.IsLabeled ? "Labeled" : sample.Status;
+        if (request.IsVerified.HasValue)
+        {
+            sample.IsVerified = request.IsVerified.Value;
+            if (sample.IsVerified)
+            {
+                sample.Status = "Verified";
+            }
+        }
+
+        if (request.IncludeInTraining.HasValue)
+        {
+            sample.IncludedInTraining = request.IncludeInTraining.Value && sample.IsLabeled;
+        }
+
+        if (sample.LastOcrOutput is null && sample.SuggestedFields is not null)
+        {
+            sample.LastOcrOutput = new Dictionary<string, string>(sample.SuggestedFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (sample.IsLabeled)
+        {
+            EvaluateAgainstPrediction(sample);
+        }
         sample.UpdatedAt = DateTimeOffset.UtcNow;
 
         var docType = FindDocType(sample.DocumentTypeId);
         if (docType is not null)
         {
-            docType.UpdatedAt = sample.UpdatedAt;
+            docType.UpdatedAt = sample.UpdatedAt ?? docType.UpdatedAt;
+        }
+
+        return sample;
+    }
+
+    public MockSample UpdateSampleVerification(int sampleId, bool isVerified)
+    {
+        var sample = FindSample(sampleId) ?? throw new InvalidOperationException("Sample not found");
+        sample.IsVerified = isVerified;
+        sample.Status = isVerified
+            ? "Verified"
+            : sample.IsLabeled ? "Labeled" : sample.Status;
+        sample.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (isVerified && sample.Fields.Count > 0)
+        {
+            EvaluateAgainstPrediction(sample);
+        }
+
+        var docType = FindDocType(sample.DocumentTypeId);
+        if (docType is not null)
+        {
+            docType.UpdatedAt = sample.UpdatedAt ?? docType.UpdatedAt;
+        }
+
+        return sample;
+    }
+
+    public MockSample UpdateSampleTrainingFlag(int sampleId, bool included)
+    {
+        var sample = FindSample(sampleId) ?? throw new InvalidOperationException("Sample not found");
+        if (included && !sample.IsLabeled)
+        {
+            throw new InvalidOperationException("Cần gán nhãn trước khi thêm vào tập huấn luyện");
+        }
+
+        sample.IncludedInTraining = included;
+        sample.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var docType = FindDocType(sample.DocumentTypeId);
+        if (docType is not null)
+        {
+            docType.UpdatedAt = sample.UpdatedAt ?? docType.UpdatedAt;
         }
 
         return sample;
@@ -234,19 +306,46 @@ public sealed class AdminMockStore
     public MockTrainingJob TriggerTraining(int docTypeId, TrainingRequest request)
     {
         var docType = FindDocType(docTypeId) ?? throw new InvalidOperationException("Document type not found");
+        var mode = string.IsNullOrWhiteSpace(request.Mode) ? "FAST" : request.Mode.Trim().ToUpperInvariant();
+        var scope = string.IsNullOrWhiteSpace(request.DatasetScope) ? "verified" : request.DatasetScope.Trim().ToLowerInvariant();
+        var dataset = SelectDataset(docType, scope).ToList();
+        if (dataset.Count == 0)
+        {
+            throw new InvalidOperationException("Chưa có mẫu nào đủ điều kiện huấn luyện (cần gán nhãn và bật cờ training).");
+        }
+
+        var baseline = CalculateAverageAccuracy(dataset)
+            ?? CalculateAverageAccuracy(docType.Samples)
+            ?? 72.0;
+        var improvement = dataset.Count >= 8 ? 5.5 : 3.5;
+        var improved = Math.Min(100, Math.Round(baseline + improvement, 1));
+
+        foreach (var sample in dataset)
+        {
+            var before = sample.Accuracy ?? baseline;
+            var after = Math.Min(100, Math.Round(before + improvement, 1));
+            ApplyAccuracy(sample, after, "Tối ưu sau huấn luyện");
+        }
+
         var job = new MockTrainingJob
         {
             Id = _nextTrainingJobId++,
             DocumentTypeId = docTypeId,
-            Mode = string.IsNullOrWhiteSpace(request.Mode) ? "FAST" : request.Mode.Trim().ToUpperInvariant(),
+            Mode = mode,
             Status = "Completed",
             CreatedAt = DateTimeOffset.UtcNow,
             CompletedAt = DateTimeOffset.UtcNow.AddMinutes(5),
             Summary = string.IsNullOrWhiteSpace(request.Notes)
-                ? "Đã tối ưu whitelist & psm dựa trên 12 mẫu gán nhãn. CER giảm 4%."
-                : request.Notes.Trim()
+                ? $"Đã tối ưu pipeline trên {dataset.Count} mẫu ({DescribeDataset(scope, dataset.Count)}). Độ chính xác tăng {Math.Round(improved - baseline, 1)} điểm."
+                : request.Notes.Trim(),
+            DatasetSize = dataset.Count,
+            DatasetScope = scope,
+            BaselineAccuracy = Math.Round(baseline, 1),
+            ImprovedAccuracy = improved,
+            DatasetSummary = DescribeDataset(scope, dataset.Count)
         };
 
+        docType.OcrConfigJson = BuildAutoTunedConfig(docType, improved, mode, scope, dataset.Count);
         docType.TrainingJobs.Insert(0, job);
         docType.UpdatedAt = job.CompletedAt ?? job.CreatedAt;
         return job;
@@ -263,6 +362,161 @@ public sealed class AdminMockStore
         }
 
         return Enum.TryParse<OcrMode>(value, true, out var mode) ? mode : OcrMode.Auto;
+    }
+
+    private static double? CalculateAverageAccuracy(IEnumerable<MockSample> samples)
+    {
+        var values = samples
+            .Where(s => s.Accuracy.HasValue)
+            .Select(s => s.Accuracy!.Value)
+            .ToList();
+
+        return values.Count == 0 ? null : Math.Round(values.Average(), 1);
+    }
+
+    private static void ApplyAccuracy(MockSample sample, double accuracy, string note)
+    {
+        var rounded = Math.Round(accuracy, 1);
+        sample.Accuracy = rounded;
+        sample.ComparisonHistory.Insert(0, new SampleComparison
+        {
+            ComparedAt = DateTimeOffset.UtcNow,
+            Accuracy = rounded,
+            Notes = note
+        });
+
+        if (sample.ComparisonHistory.Count > 10)
+        {
+            sample.ComparisonHistory.RemoveRange(10, sample.ComparisonHistory.Count - 10);
+        }
+    }
+
+    private static void EvaluateAgainstPrediction(MockSample sample)
+    {
+        if (sample.Fields.Count == 0)
+        {
+            sample.Accuracy = null;
+            return;
+        }
+
+        var prediction = sample.LastOcrOutput ?? sample.SuggestedFields;
+        if (prediction is null || prediction.Count == 0)
+        {
+            sample.Accuracy = null;
+            return;
+        }
+
+        var matches = sample.Fields.Count(kv =>
+            prediction.TryGetValue(kv.Key, out var predicted)
+            && string.Equals(predicted?.Trim(), kv.Value?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        var accuracy = (double)matches / sample.Fields.Count * 100;
+        ApplyAccuracy(sample, accuracy, "Đánh giá sau khi gán nhãn");
+    }
+
+    private static void EvaluateAgainstBaseline(MockDocumentType docType, MockSample sample)
+    {
+        var baseline = docType.Samples
+            .Where(s => s.Id != sample.Id && s.IsVerified && s.Fields.Count > 0)
+            .OrderByDescending(s => s.UpdatedAt ?? s.UploadedAt)
+            .FirstOrDefault();
+
+        if (baseline is null)
+        {
+            return;
+        }
+
+        var prediction = sample.SuggestedFields ?? sample.LastOcrOutput;
+        if (prediction is null || prediction.Count == 0)
+        {
+            return;
+        }
+
+        var matches = baseline.Fields.Count(kv =>
+            prediction.TryGetValue(kv.Key, out var predicted)
+            && string.Equals(predicted?.Trim(), kv.Value?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        var total = baseline.Fields.Count == 0 ? 1 : baseline.Fields.Count;
+        var accuracy = (double)matches / total * 100;
+        ApplyAccuracy(sample, accuracy, $"So sánh với mẫu chuẩn {baseline.FileName}");
+        sample.LastOcrOutput = new Dictionary<string, string>(prediction, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<MockSample> SelectDataset(MockDocumentType docType, string? scope)
+    {
+        var baseSet = docType.Samples.Where(s => s.IncludedInTraining && s.IsLabeled);
+        var normalized = string.IsNullOrWhiteSpace(scope) ? "verified" : scope.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "all" => baseSet,
+            "latest" => baseSet
+                .OrderByDescending(s => s.UpdatedAt ?? s.UploadedAt)
+                .Take(10),
+            _ => baseSet.Where(s => s.IsVerified)
+        };
+    }
+
+    private static string DescribeDataset(string scope, int count)
+        => scope switch
+        {
+            "all" => $"Toàn bộ {count} mẫu đã gán nhãn",
+            "latest" => $"{Math.Min(count, 10)} mẫu mới nhất",
+            _ => $"{count} mẫu đã verify"
+        };
+
+    private static string BuildAutoTunedConfig(MockDocumentType docType, double? accuracy, string mode, string scope, int datasetSize)
+    {
+        var payload = new
+        {
+            autoTunedAt = DateTimeOffset.UtcNow,
+            docType = docType.Code,
+            preferredMode = mode,
+            dataset = new { scope, size = datasetSize },
+            avgAccuracy = accuracy
+        };
+
+        return JsonSerializer.Serialize(payload, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+    }
+
+    internal static object BuildDatasetMetrics(MockDocumentType docType)
+    {
+        var samples = docType.Samples;
+        var total = samples.Count;
+        var labeled = samples.Count(s => s.IsLabeled);
+        var verified = samples.Count(s => s.IsVerified);
+        var training = samples.Count(s => s.IncludedInTraining);
+        var average = CalculateAverageAccuracy(samples);
+        var summary = total == 0
+            ? "Chưa có dữ liệu"
+            : $"{verified}/{total} verify · {training} train";
+
+        var evaluations = samples
+            .SelectMany(s => s.ComparisonHistory.Select(c => new
+            {
+                SampleId = s.Id,
+                s.FileName,
+                c.Accuracy,
+                c.Notes,
+                c.ComparedAt
+            }))
+            .OrderByDescending(x => x.ComparedAt)
+            .Take(5)
+            .ToList();
+
+        return new
+        {
+            Total = total,
+            Labeled = labeled,
+            Verified = verified,
+            Training = training,
+            AverageAccuracy = average,
+            Summary = summary,
+            RecentEvaluations = evaluations
+        };
     }
 
     private void Seed()
@@ -347,6 +601,15 @@ public sealed class AdminMockStore
                 ["address"] = "Phường 1, Quận 3"
             },
             IsLabeled = true,
+            LastOcrOutput = new Dictionary<string, string>
+            {
+                ["id"] = "001099002233",
+                ["name"] = "Nguyen Van Demo",
+                ["dob"] = "12/03/1992",
+                ["address"] = "Phuong 1, Quan 3"
+            },
+            IncludedInTraining = true,
+            IsVerified = true,
             UpdatedAt = DateTimeOffset.UtcNow.AddDays(-5)
         };
 
@@ -364,12 +627,21 @@ public sealed class AdminMockStore
             {
                 ["address"] = "12 Trần Hưng Đạo, Q1"
             },
+            LastOcrOutput = new Dictionary<string, string>
+            {
+                ["address"] = "12 Tran Hung Dao, Q1"
+            },
+            IncludedInTraining = false,
+            IsVerified = false,
             IsLabeled = false,
             UpdatedAt = DateTimeOffset.UtcNow.AddDays(-6)
         };
 
+        ApplyAccuracy(sample1, 94.8, "Đối chiếu với mẫu chuẩn CCCD");
+
         cccdFull.Samples.Add(sample1);
         cccdFull.Samples.Add(sample2);
+        EvaluateAgainstBaseline(cccdFull, sample2);
 
         cccdFull.TrainingJobs.Add(new MockTrainingJob
         {
@@ -379,8 +651,14 @@ public sealed class AdminMockStore
             Status = "Completed",
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-4),
             CompletedAt = DateTimeOffset.UtcNow.AddDays(-4).AddHours(1),
-            Summary = "Tối ưu whitelist cho số định danh. CER giảm 3% so với baseline."
+            Summary = "Tối ưu whitelist cho số định danh. CER giảm 3% so với baseline.",
+            DatasetSize = 8,
+            DatasetScope = "verified",
+            BaselineAccuracy = 89.3,
+            ImprovedAccuracy = 94.8,
+            DatasetSummary = "8 mẫu đã verify"
         });
+        cccdFull.OcrConfigJson = BuildAutoTunedConfig(cccdFull, 94.8, "FAST", "verified", 8);
 
         var hoKhau = new MockDocumentType
         {
@@ -418,7 +696,7 @@ public sealed class AdminMockStore
             UpdatedAt = DateTimeOffset.UtcNow.AddDays(-14)
         });
 
-        hoKhau.Samples.Add(new MockSample
+        var hoKhauSample = new MockSample
         {
             Id = _nextSampleId++,
             DocumentTypeId = hoKhau.Id,
@@ -435,9 +713,20 @@ public sealed class AdminMockStore
                 ["owner"] = "Trần Văn A",
                 ["address"] = "123 Lê Lợi, Đống Đa"
             },
+            LastOcrOutput = new Dictionary<string, string>
+            {
+                ["householdId"] = "123456789",
+                ["owner"] = "TRAN VAN A",
+                ["address"] = "123 LE LOI, DONG DA"
+            },
+            IncludedInTraining = true,
+            IsVerified = true,
             IsLabeled = true,
             UpdatedAt = DateTimeOffset.UtcNow.AddDays(-10)
-        });
+        };
+
+        ApplyAccuracy(hoKhauSample, 91.2, "Đối chiếu với mẫu hộ khẩu chuẩn");
+        hoKhau.Samples.Add(hoKhauSample);
 
         hoKhau.TrainingJobs.Add(new MockTrainingJob
         {
@@ -447,8 +736,14 @@ public sealed class AdminMockStore
             Status = "Completed",
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-11),
             CompletedAt = DateTimeOffset.UtcNow.AddDays(-11).AddHours(2),
-            Summary = "Fine-tune PP-OCR threshold, cải thiện recall anchor."
+            Summary = "Fine-tune PP-OCR threshold, cải thiện recall anchor.",
+            DatasetSize = 4,
+            DatasetScope = "verified",
+            BaselineAccuracy = 86.5,
+            ImprovedAccuracy = 91.2,
+            DatasetSummary = "4 mẫu verified"
         });
+        hoKhau.OcrConfigJson = BuildAutoTunedConfig(hoKhau, 91.2, "ENHANCED", "verified", 4);
 
         var cccdId = new MockDocumentType
         {
@@ -477,6 +772,13 @@ public sealed class AdminMockStore
                 ["id"] = "012345678901",
                 ["name"] = "Lê Thị B"
             },
+            LastOcrOutput = new Dictionary<string, string>
+            {
+                ["id"] = "012345678901",
+                ["name"] = "LE THI B"
+            },
+            IncludedInTraining = false,
+            IsVerified = false,
             IsLabeled = false,
             UpdatedAt = DateTimeOffset.UtcNow.AddDays(-3)
         });
@@ -549,11 +851,16 @@ public sealed class MockSample
     public DateTimeOffset? UpdatedAt { get; set; }
     public string Status { get; set; } = "Pending";
     public bool IsLabeled { get; set; }
+    public bool IncludedInTraining { get; set; }
+    public bool IsVerified { get; set; }
     public string? PreviewUrl { get; set; }
     public string? OcrPreview { get; set; }
     public string? LabeledText { get; set; }
     public Dictionary<string, string> Fields { get; set; } = new();
     public Dictionary<string, string>? SuggestedFields { get; set; }
+    public Dictionary<string, string>? LastOcrOutput { get; set; }
+    public double? Accuracy { get; set; }
+    public List<SampleComparison> ComparisonHistory { get; } = new();
     public string? Notes { get; set; }
 }
 
@@ -566,6 +873,18 @@ public sealed class MockTrainingJob
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string Summary { get; set; } = string.Empty;
+    public int DatasetSize { get; set; }
+    public string DatasetScope { get; set; } = "verified";
+    public double? BaselineAccuracy { get; set; }
+    public double? ImprovedAccuracy { get; set; }
+    public string? DatasetSummary { get; set; }
+}
+
+public sealed class SampleComparison
+{
+    public DateTimeOffset ComparedAt { get; set; }
+    public double Accuracy { get; set; }
+    public string Notes { get; set; } = string.Empty;
 }
 
 public sealed class TemplateTestResult
@@ -623,10 +942,23 @@ public sealed class SampleLabelRequest
     public string? LabeledText { get; set; }
     public Dictionary<string, string>? Fields { get; set; }
     public string? Notes { get; set; }
+    public bool? IsVerified { get; set; }
+    public bool? IncludeInTraining { get; set; }
 }
 
 public sealed class TrainingRequest
 {
     public string Mode { get; set; } = "FAST";
     public string? Notes { get; set; }
+    public string DatasetScope { get; set; } = "verified";
+}
+
+public sealed class SampleVerificationRequest
+{
+    public bool IsVerified { get; set; }
+}
+
+public sealed class SampleTrainingRequest
+{
+    public bool IncludedInTraining { get; set; }
 }

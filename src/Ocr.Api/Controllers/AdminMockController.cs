@@ -110,6 +110,34 @@ public sealed class AdminMockController : ControllerBase
         }
     }
 
+    [HttpPut("samples/{sampleId:int}/verify")]
+    public IActionResult UpdateSampleVerification(int sampleId, [FromBody] SampleVerificationRequest request)
+    {
+        try
+        {
+            var updated = _store.UpdateSampleVerification(sampleId, request.IsVerified);
+            return Ok(MapSample(updated));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPut("samples/{sampleId:int}/training")]
+    public IActionResult UpdateSampleTraining(int sampleId, [FromBody] SampleTrainingRequest request)
+    {
+        try
+        {
+            var updated = _store.UpdateSampleTrainingFlag(sampleId, request.IncludedInTraining);
+            return Ok(MapSample(updated));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpGet("doc-types/{id:int}/templates")]
     public IActionResult GetTemplates(int id)
     {
@@ -232,6 +260,7 @@ public sealed class AdminMockController : ControllerBase
                 Templates = docType.Templates.Count,
                 Samplers = docType.Samplers.Count
             },
+            Dataset = AdminMockStore.BuildDatasetMetrics(docType),
             ActiveTemplate = docType.Templates.FirstOrDefault(t => t.IsActive)?.Version,
             LastTraining = docType.TrainingJobs
                 .OrderByDescending(t => t.CompletedAt ?? t.CreatedAt)
@@ -252,6 +281,7 @@ public sealed class AdminMockController : ControllerBase
             docType.OnnxConfigJson,
             docType.CreatedAt,
             docType.UpdatedAt,
+            Dataset = AdminMockStore.BuildDatasetMetrics(docType),
             Templates = docType.Templates.Select(MapTemplate).ToList(),
             Samplers = docType.Samplers.Select(MapSampler).ToList(),
             Samples = docType.Samples.Select(MapSample).ToList(),
@@ -310,11 +340,16 @@ public sealed class AdminMockController : ControllerBase
             sample.UpdatedAt,
             sample.Status,
             sample.IsLabeled,
+            sample.IsVerified,
+            sample.IncludedInTraining,
             sample.PreviewUrl,
             sample.OcrPreview,
             sample.LabeledText,
             sample.Fields,
             sample.SuggestedFields,
+            sample.LastOcrOutput,
+            sample.Accuracy,
+            ComparisonHistory = sample.ComparisonHistory.Select(MapSampleComparison).ToList(),
             sample.Notes
         };
 
@@ -327,6 +362,19 @@ public sealed class AdminMockController : ControllerBase
             job.Status,
             job.CreatedAt,
             job.CompletedAt,
-            job.Summary
+            job.Summary,
+            job.DatasetSize,
+            job.DatasetScope,
+            job.BaselineAccuracy,
+            job.ImprovedAccuracy,
+            job.DatasetSummary
+        };
+
+    private static object MapSampleComparison(SampleComparison comparison)
+        => new
+        {
+            comparison.Accuracy,
+            comparison.Notes,
+            comparison.ComparedAt
         };
 }
