@@ -1,7 +1,9 @@
 namespace Ocr.Api.Controllers;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Ocr.Api.Mock;
 
@@ -82,6 +84,38 @@ public sealed class AdminMockController : ControllerBase
         {
             var sample = _store.CreateSample(id, request);
             return Ok(MapSample(sample));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("doc-types/{id:int}/sample-files")]
+    public IActionResult UploadSampleFiles(int id, [FromForm] SampleUploadRequest request)
+    {
+        if (request.Files is null || request.Files.Count == 0)
+        {
+            return BadRequest("Chưa chọn tài liệu mẫu.");
+        }
+
+        try
+        {
+            var uploader = string.IsNullOrWhiteSpace(request.UploadedBy) ? "admin" : request.UploadedBy.Trim();
+            var createdSamples = new List<object>();
+
+            foreach (var file in request.Files)
+            {
+                var sample = _store.CreateSample(id, new SampleCreateRequest
+                {
+                    FileName = file?.FileName ?? string.Empty,
+                    UploadedBy = uploader
+                });
+
+                createdSamples.Add(MapSample(sample));
+            }
+
+            return Ok(createdSamples);
         }
         catch (InvalidOperationException ex)
         {
@@ -377,4 +411,11 @@ public sealed class AdminMockController : ControllerBase
             comparison.Notes,
             comparison.ComparedAt
         };
+}
+
+public sealed class SampleUploadRequest
+{
+    public string? UploadedBy { get; set; }
+
+    public List<IFormFile> Files { get; set; } = new();
 }
