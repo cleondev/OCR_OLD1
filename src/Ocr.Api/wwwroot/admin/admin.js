@@ -377,6 +377,32 @@ async function loadDocTypeSummaries() {
     : [];
 }
 
+async function uploadSampleFilesForDocType(docTypeId, files, uploadedBy) {
+  if (!docTypeId || !files || !files.length) {
+    return [];
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => {
+    if (file) {
+      formData.append('files', file);
+    }
+  });
+
+  if (!formData.has('files')) {
+    return [];
+  }
+
+  if (uploadedBy) {
+    formData.append('uploadedBy', uploadedBy);
+  }
+
+  return fetchJson(`${API_BASE}/doc-types/${docTypeId}/sample-files`, {
+    method: 'POST',
+    body: formData
+  });
+}
+
 async function ensureDocTypeDetail(id, options = {}) {
   const { force = false } = options;
   if (!force && state.docTypeDetails[id]) {
@@ -628,6 +654,24 @@ function renderDocTypeCreateForm() {
         <div class="form-field">
           <label>OCR Config JSON</label>
           <textarea name="ocrConfigJson" class="small" placeholder='{"psm":6}'></textarea>
+        </div>
+      </div>
+      <div class="form-section">
+        <h4>Tài liệu mẫu ban đầu</h4>
+        <p class="inline-hint">Chọn các file ảnh/PDF để tạo sẵn tập dữ liệu demo cho loại tài liệu này.</p>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Người upload</label>
+            <input name="sampleUploadedBy" placeholder="ten.nguoidung" />
+          </div>
+          <div class="form-field full-width">
+            <label>Tài liệu mẫu (tùy chọn)</label>
+            <input type="file" name="sampleFiles" multiple accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.pdf" />
+            <div class="inline-hint">Có thể chọn nhiều file ảnh hoặc PDF. Các file sẽ được lưu trong kho mẫu giả lập.</div>
+            <ul class="file-list empty" data-role="sample-file-list">
+              <li>Chưa chọn tài liệu nào</li>
+            </ul>
+          </div>
         </div>
       </div>
       <div class="form-actions">
@@ -1477,6 +1521,28 @@ function bindDocTypeListEvents() {
 
   const form = document.getElementById('create-doc-type-form');
   if (form) {
+    const sampleInput = form.querySelector('input[name="sampleFiles"]');
+    const sampleList = form.querySelector('[data-role="sample-file-list"]');
+
+    if (sampleInput && sampleList) {
+      const renderSelectedFiles = () => {
+        const files = Array.from(sampleInput.files || []).filter((file) => file && file.name);
+        if (!files.length) {
+          sampleList.innerHTML = '<li>Chưa chọn tài liệu nào</li>';
+          sampleList.classList.add('empty');
+          return;
+        }
+
+        sampleList.innerHTML = files
+          .map((file) => `<li>${escapeHtml(file.name)}</li>`)
+          .join('');
+        sampleList.classList.remove('empty');
+      };
+
+      renderSelectedFiles();
+      sampleInput.addEventListener('change', renderSelectedFiles);
+    }
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const payload = {
@@ -1488,6 +1554,11 @@ function bindDocTypeListEvents() {
         ocrConfigJson: form.ocrConfigJson.value.trim() || null
       };
 
+      const selectedFiles = sampleInput
+        ? Array.from(sampleInput.files || []).filter((file) => file && file.name)
+        : [];
+      const uploadedBy = form.sampleUploadedBy ? form.sampleUploadedBy.value.trim() : '';
+
       try {
         const created = await fetchJson(`${API_BASE}/doc-types`, {
           method: 'POST',
@@ -1495,11 +1566,36 @@ function bindDocTypeListEvents() {
           body: JSON.stringify(payload)
         });
 
-        const newId = getValue(created, 'Id');
+        let message = 'Đã tạo loại tài liệu mới';
+        const newId = Number(getValue(created, 'Id'));
+        if (Number.isNaN(newId)) {
+          await loadDocTypeSummaries();
+          showToast(message);
+          navigateTo('#/doc-types');
+          return;
+        }
+
         uiState.showCreateDocType = false;
         state.docTypeDetails[newId] = created;
+
+        if (selectedFiles.length) {
+          const countLabel = selectedFiles.length === 1 ? '1 tài liệu mẫu' : `${selectedFiles.length} tài liệu mẫu`;
+          try {
+            await uploadSampleFilesForDocType(newId, selectedFiles, uploadedBy);
+            const refreshed = await ensureDocTypeDetail(newId, { force: true });
+            if (refreshed) {
+              state.docTypeDetails[newId] = refreshed;
+            }
+            message = `Đã tạo loại tài liệu mới và thêm ${countLabel}`;
+          } catch (uploadError) {
+            console.error(uploadError);
+            await ensureDocTypeDetail(newId, { force: true });
+            message = 'Đã tạo loại tài liệu mới nhưng upload tài liệu mẫu thất bại';
+          }
+        }
+
         await loadDocTypeSummaries();
-        showToast('Đã tạo loại tài liệu mới');
+        showToast(message);
         navigateTo(`#/doc-types/${newId}/configuration`);
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể tạo docType');
