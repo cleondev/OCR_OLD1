@@ -462,24 +462,6 @@ function renderApp() {
 
 function renderSidebar(segments) {
   const topRoute = segments[0] || 'doc-types';
-  const currentDocTypeId = topRoute === 'doc-types' && segments[1] ? Number(segments[1]) : null;
-  const docTypeLinks = state.docTypes
-    .map((dt) => {
-      const id = getValue(dt, 'Id');
-      const name = getValue(dt, 'Name');
-      const isActive = currentDocTypeId === id;
-      return `<a href="#/doc-types/${id}/configuration" class="${isActive ? 'active' : ''}">${escapeHtml(name)}</a>`;
-    })
-    .join('');
-
-  const showDocTypeShortcuts = !uiState.showCreateDocType;
-  const docTypeShortcutSection = showDocTypeShortcuts
-    ? `
-      <div class="sidebar-docs">
-        ${docTypeLinks || '<span class="inline-hint">Chưa có loại tài liệu</span>'}
-      </div>
-    `
-    : '';
 
   return `
     <aside class="sidebar">
@@ -489,7 +471,6 @@ function renderSidebar(segments) {
         <a href="#/datasets" class="${topRoute === 'datasets' ? 'active' : ''}">Tập dữ liệu</a>
         <a href="#/training" class="${topRoute === 'training' ? 'active' : ''}">Huấn luyện</a>
       </nav>
-      ${docTypeShortcutSection}
       <button class="linklike" id="sidebar-create-doc-type">+ Thêm loại tài liệu</button>
     </aside>
   `;
