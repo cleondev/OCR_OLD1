@@ -44,13 +44,6 @@ body {
   padding-right: 6px;
 }
 
-.sidebar-docs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 16px;
-}
-
 .sidebar a,
 .sidebar button.linklike {
   display: block;
