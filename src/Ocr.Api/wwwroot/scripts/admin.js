@@ -19,46 +19,6 @@ const uiState = {
 
 let lastRouteSegments = [];
 let sidebarEventsBound = false;
-const dataTableInstances = [];
-
-function cleanupDataTables() {
-  while (dataTableInstances.length) {
-    const instance = dataTableInstances.pop();
-    if (instance && typeof instance.destroy === 'function') {
-      instance.destroy();
-    }
-  }
-}
-
-function enhanceDataTables(container) {
-  if (!container) {
-    return;
-  }
-
-  const lib = window.simpleDatatables;
-  if (!lib || typeof lib.DataTable !== 'function') {
-    return;
-  }
-
-  const tables = container.querySelectorAll('[data-enhance="datatable"]');
-  tables.forEach((table) => {
-    const instance = new lib.DataTable(table, {
-      searchable: true,
-      fixedHeight: false,
-      perPage: 10,
-      perPageSelect: [5, 10, 20, 50],
-      labels: {
-        placeholder: 'Tìm kiếm...',
-        perPage: '{select} dòng mỗi trang',
-        noRows: 'Không có dữ liệu phù hợp',
-        info: 'Hiển thị {start} - {end} / {rows}',
-        loading: 'Đang tải...',
-        infoFiltered: '(lọc từ tổng {rowsTotal})'
-      }
-    });
-    dataTableInstances.push(instance);
-  });
-}
 
 function resetDocTypeScopedUiState() {
   uiState.sampleFormFor = null;
@@ -269,7 +229,7 @@ function renderDatasetExplorer() {
         <span>Độ chính xác TB: ${averageAccuracy}</span>
       </div>
       <div class="table-wrapper">
-        <table data-enhance="datatable" data-table-key="dataset-explorer">
+        <table>
           <thead>
             <tr>
               <th>Tài liệu</th>
@@ -330,7 +290,7 @@ function renderTrainingHub() {
     </div>
     <div class="panel">
       <div class="table-wrapper">
-        <table data-enhance="datatable" data-table-key="training-hub">
+        <table>
           <thead>
             <tr>
               <th>Loại tài liệu</th>
@@ -562,11 +522,9 @@ function renderApp() {
   bindSidebarEvents();
   updateSidebar(root, segments);
 
-  cleanupDataTables();
   const mainContent = renderMainContent(segments);
   main.innerHTML = mainContent;
 
-  enhanceDataTables(main);
   updateToast();
   bindContentEvents(segments);
 }
@@ -715,7 +673,7 @@ function renderDocTypeList() {
     </div>
     <div class="panel">
       <div class="table-wrapper">
-        <table class="doc-type-table" data-enhance="datatable" data-table-key="doc-type-list">
+        <table class="doc-type-table">
           <thead>
             <tr>
               <th>Loại tài liệu</th>
@@ -1064,7 +1022,7 @@ function renderDocTypeDataset(docType) {
       ${createForm}
       ${samples.length ? `
         <div class="table-wrapper">
-          <table data-enhance="datatable" data-table-key="doc-type-dataset-${docTypeId}">
+          <table>
             <thead>
               <tr>
                 <th>Tài liệu</th>
@@ -1170,7 +1128,7 @@ function renderDocTypeTemplates(docType, extra) {
       ${createForm}
       ${templates.length ? `
         <div class="table-wrapper">
-          <table data-enhance="datatable" data-table-key="doc-type-templates-${docTypeId}">
+          <table>
             <thead>
               <tr>
                 <th>Phiên bản</th>
